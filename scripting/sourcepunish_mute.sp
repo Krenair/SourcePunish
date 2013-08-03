@@ -4,10 +4,10 @@
 
 public Plugin:myinfo = {
     name = "SourcePunish Mute",
-    author = "Alex",
+    author = "Azelphur",
     description = "Mute plugin for SourcePunish",
     version = "0.1",
-    url = ""
+    url = "https://github.com/Krenair/SourcePunish"
 };
 
 public OnAllPluginsLoaded() {

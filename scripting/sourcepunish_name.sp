@@ -4,10 +4,10 @@
 
 public Plugin:myinfo = {
     name = "SourcePunish Block name change",
-    author = "Alex",
+    author = "Azelphur",
     description = "Block name change plugin for SourcePunish",
     version = "0.1",
-    url = ""
+    url = "https://github.com/Krenair/SourcePunish"
 };
 
 new g_bNameBlocked[MAXPLAYERS+1];

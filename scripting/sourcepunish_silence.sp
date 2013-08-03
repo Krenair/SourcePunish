@@ -4,10 +4,10 @@
 
 public Plugin:myinfo = {
     name = "SourcePunish Silence",
-    author = "Alex",
+    author = "Azelphur",
     description = "Silence plugin for SourcePunish",
     version = "0.1",
-    url = ""
+    url = "https://github.com/Krenair/SourcePunish"
 };
 
 new g_bMutedPlayers[MAXPLAYERS+1];

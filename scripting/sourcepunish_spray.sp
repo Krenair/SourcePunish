@@ -4,10 +4,10 @@
 
 public Plugin:myinfo = {
     name = "SourcePunish Block Spray",
-    author = "Alex",
+    author = "Azelphur",
     description = "Block Spray plugin for SourcePunish",
     version = "0.1",
-    url = ""
+    url = "https://github.com/Krenair/SourcePunish"
 };
 
 new bool:g_bSprayBanned[MAXPLAYERS+1];
