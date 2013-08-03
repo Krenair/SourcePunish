@@ -138,7 +138,7 @@ public Action:PunishmentExpire(Handle:timer, Handle:punishmentInfoPack) {
 	decl String:setReadableTime[64];
 	FormatTime(setReadableTime, sizeof(setReadableTime), "%F at %R (UTC)", setTimestamp); // E.g. "2013-08-03 at 00:12 (UTC)"
 
-	PrintToChat(targetClient, "Punishment of type %s set by %s on %s expired", type, setBy, setReadableTime);
+	PrintToChat(targetClient, "[SM] Punishment of type %s set by %s on %s expired", type, setBy, setReadableTime);
 
 	Call_StartForward(pmethod[removeCallback]);
 	Call_PushCell(targetClient);
