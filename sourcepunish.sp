@@ -97,7 +97,7 @@ public Action:Command_Punish(client, args) {
 		decl result;
 		Call_Finish(result);
 
-		if (!(pmethod[flags] & SP_NOREMOVE)) {
+		if (!(pmethod[flags] & SP_NOREMOVE) && !(pmethod[flags] & SP_NOTIME) && !StrEqual(time, "0")) {
 			new Handle:punishmentInfoPack = CreateDataPack();
 			WritePackString(punishmentInfoPack, type);
 			WritePackCell(punishmentInfoPack, target_list[i]);
