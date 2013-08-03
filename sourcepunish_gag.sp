@@ -7,7 +7,7 @@ public Plugin:myinfo = {
     author = "Alex",
     description = "Gag plugin for SourcePunish",
     version = "0.1",
-    url = ""
+    url = "https://github.com/Krenair/SourcePunish"
 };
 
 new mutedPlayers[MAXPLAYERS + 1];

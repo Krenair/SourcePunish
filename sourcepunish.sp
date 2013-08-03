@@ -1,5 +1,3 @@
-//TODO: Record stuff to DB
-
 #include <sourcemod>
 #include <sdktools>
 #include <sourcepunish>
@@ -9,7 +7,7 @@ public Plugin:myinfo = {
     author = "Alex",
     description = "Punishment management system",
     version = "0.02",
-    url = ""
+    url = "https://github.com/Krenair/SourcePunish"
 }
 
 enum punishmentType {
@@ -22,14 +20,69 @@ enum punishmentType {
 
 new Handle:punishments = INVALID_HANDLE;
 new Handle:punishmentRemovalTimers[MAXPLAYERS + 1];
+new Handle:db = INVALID_HANDLE;
 
 public OnPluginStart() {
 	punishments = CreateTrie();
 	LoadTranslations("common.phrases");
 	RegAdminCmd("sm_punish", Command_Punish, ADMFLAG_GENERIC, "Punishes a player");
+
+	new String:error[255];
+	db = SQL_DefConnect(error, sizeof(error));
+	if (db == INVALID_HANDLE) {
+		ThrowError("Could not connect to SQL: %s", error);
+		return;
+	}
+
+	/*new Handle:query = SQL_Query(db, "SELECT type, punisher_id, punisher_name, punished_id, start_time, end_time FROM sourcepunish_punishments WHERE remover_id = 0 AND start_time != end_time");
+	if (query == INVALID_HANDLE) {
+		SQL_GetError(db, error, sizeof(error));
+		ThrowError("Error querying DB: %s", error);
+		return;
+	}
+	new Handle:clientAuths = CreateArray();
+	for (new i = 1; i <= MaxClients; i++) {
+		if (IsClientConnected(i)) {
+			decl String:auth[64];
+			GetClientAuthString(i, auth, sizeof(auth));
+			SetArrayString(clientAuths, i, auth);
+		}
+	}
+	while (SQL_FetchRow(query)) {
+		decl String:type[64], String:punisherAuth[64], String:punisherName[64], String:punishedAuth[64];
+		SQL_FetchString(query, 0, type, sizeof(type));
+		SQL_FetchString(query, 1, punisherAuth, sizeof(punisherAuth));
+		SQL_FetchString(query, 2, punisherName, sizeof(punisherName));
+		SQL_FetchString(query, 3, punishedAuth, sizeof(punishedAuth));
+		new startTime = SQL_FetchInt(query, 4);
+		new endTime = SQL_FetchInt(query, 5);
+
+		for (new i = 1; i <= MaxClients; i++) {
+			decl String:auth[64];
+			GetArrayString(clientAuths, i, auth, sizeof(auth));
+			if (StrEqual(punishedAuth, auth)) {
+				decl pmethod[punishmentType];
+				if (!GetTrieArray(punishments, type, pmethod, sizeof(pmethod))) {
+					PrintToServer("Loaded an active punishment with unknown type %s", type);
+				}
+
+				if (!(pmethod[flags] & SP_NOREMOVE) && !(pmethod[flags] & SP_NOTIME)) {
+					new Handle:punishmentInfoPack = CreateDataPack();
+					WritePackString(punishmentInfoPack, type);
+					WritePackCell(punishmentInfoPack, i);
+					WritePackString(punishmentInfoPack, punisherName);
+					WritePackCell(punishmentInfoPack, startTime);
+					ResetPack(punishmentInfoPack); // Move index back to beginning so we can read from it.
+					punishmentRemovalTimers[i] = CreateTimer(float(GetTime() - endTime), PunishmentExpire, punishmentInfoPack);
+				}
+				break;
+			}
+		}
+	}*/
 }
 
 public Action:Command_Punish(client, args) {
+	new timestamp = GetTime();
 	if (args < 2) {
 		ReplyToCommand(client, "[SM] Usage: sm_punish <type> <target> [time|0] [reason]");
 		return Plugin_Handled;
@@ -87,14 +140,21 @@ public Action:Command_Punish(client, args) {
 		return Plugin_Handled;
 	}
 
-	decl String:setBy[64];
+	decl String:setBy[64], String:setByAuth[64];
 	GetClientName(client, setBy, sizeof(setBy));
+	GetClientAuthString(client, setByAuth, sizeof(setByAuth));
+	new endTime = timestamp + RoundToNearest(60.0 * StringToFloat(time));
 
 	for (new i = 0; i < target_count; i++) {
+		decl String:targetName[64], String:targetAuth[64];
+		GetClientName(target_list[i], targetName, sizeof(targetName));
+		GetClientAuthString(target_list[i], targetAuth, sizeof(targetAuth));
+
+		RecordPunishmentInDB(type, setByAuth, setBy, targetAuth, targetName, timestamp, endTime, reason); //TODO: Use this.
 		Call_StartForward(pmethod[addCallback]);
 		Call_PushCell(target_list[i]);
 		Call_PushString(reason);
-		decl result;
+		decl result; //TODO: Use this.
 		Call_Finish(result);
 
 		if (!(pmethod[flags] & SP_NOREMOVE) && !(pmethod[flags] & SP_NOTIME) && !StrEqual(time, "0")) {
@@ -102,7 +162,7 @@ public Action:Command_Punish(client, args) {
 			WritePackString(punishmentInfoPack, type);
 			WritePackCell(punishmentInfoPack, target_list[i]);
 			WritePackString(punishmentInfoPack, setBy);
-			WritePackCell(punishmentInfoPack, GetTime());
+			WritePackCell(punishmentInfoPack, timestamp);
 			ResetPack(punishmentInfoPack); // Move index back to beginning so we can read from it.
 			punishmentRemovalTimers[target_list[i]] = CreateTimer(StringToFloat(time) * 60, PunishmentExpire, punishmentInfoPack);
 		}
@@ -112,13 +172,54 @@ public Action:Command_Punish(client, args) {
 	return Plugin_Handled;
 }
 
+new Handle:punishmentInsertStatement = INVALID_HANDLE;
+public RecordPunishmentInDB(
+	String:type[],
+	String:punisherAuth[],
+	String:punisherName[],
+	String:punishedAuth[],
+	String:punishedName[],
+	startTime,
+	endTime,
+	String:reason[]
+) {
+	decl String:query[255] = "INSERT INTO sourcepunish_punishments\
+(type, punisher_id, punisher_name, punished_id, punished_name, start_time, end_time, reason)\
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);";
+	if (punishmentInsertStatement == INVALID_HANDLE) {
+		new String:error[255];
+		punishmentInsertStatement = SQL_PrepareQuery(db, query, error, sizeof(error));
+		if (punishmentInsertStatement == INVALID_HANDLE) {
+			PrintToServer("Error preparing statement: %s", error);
+			return 0;
+		}
+	}
+
+	SQL_BindParamString(punishmentInsertStatement, 0, type, false);
+	SQL_BindParamString(punishmentInsertStatement, 1, punisherAuth, false);
+	SQL_BindParamString(punishmentInsertStatement, 2, punisherName, false);
+	SQL_BindParamString(punishmentInsertStatement, 3, punishedAuth, false);
+	SQL_BindParamString(punishmentInsertStatement, 4, punishedName, false);
+	SQL_BindParamInt(punishmentInsertStatement, 5, startTime);
+	SQL_BindParamInt(punishmentInsertStatement, 6, endTime);
+	SQL_BindParamString(punishmentInsertStatement, 7, reason, false);
+
+	if (!SQL_Execute(punishmentInsertStatement)) {
+		decl String:error[255];
+		SQL_GetError(punishmentInsertStatement, error, sizeof(error));
+		PrintToServer("Error executing prepared statement: %s", error);
+		return -1;
+	} else {
+		return SQL_GetInsertId(punishmentInsertStatement);
+	}
+}
+
 public OnClientDisconnect(client) {
 	if (punishmentRemovalTimers[client] != INVALID_HANDLE) {
 		KillTimer(punishmentRemovalTimers[client]);
 		punishmentRemovalTimers[client] = INVALID_HANDLE;
 	}
 }
-
 
 public Action:PunishmentExpire(Handle:timer, Handle:punishmentInfoPack) {
 	decl String:type[64];
