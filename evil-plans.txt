@@ -1,0 +1,23 @@
+SourcePunish core - plugin for SourceMod. Handles sm_add command for starting punishments, automatic removal of punishments, logging everything in the database, etc.
+Web panel - made in PHP. Basically a DB frontend for history which is also capable of starting/ending punishments (user would need to be logged in as authorised server admin)
+Punishment plugins - plugins for SourceMod that provide add punishment/remove punishment callbacks and punishment type strings to SourcePunish plugin
+
+sm_add <type> <target> <time> <reason>
+<Azelphur> when a plugin loads, it'd notify the core of it's name, along with it's add and remove callbacks
+
+See SourceIRC for how a plugin might have it's own plugins (SourceIRC just connects to IRC, joins channels and responds to ping. everything else is done by plugins)
+
+Support for multi-server setups: share DB and web panel between servers.
+
+Example punishment: 'user cannot create props' in FortWars
+
+<Alex> You said the web panel was going to add/remove punishments - how? rcon?
+<Azelphur> Alex: could do that, yea
+<Alex> did you have any other ideas in mind?
+<Azelphur> perhaps a direct connection (probably more reliable)
+<Alex> direct connection?
+<Alex> can you be more specific? xD
+<Azelphur> yea, just like a simple TCP/telnet style connection
+<Alex> So the core sourcepunish plugin on the server will listen for TCP connections, and if a certain secret is entered the client will be able to run commands?
+<Azelphur> Alex: something like that, I wonder how SourceBans do it
+<Azelphur> would be good to look at that :)
