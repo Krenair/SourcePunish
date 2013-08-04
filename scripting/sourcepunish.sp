@@ -1,3 +1,9 @@
+//TODO: Fix ActivePunishmentsLookupComplete race condition - maybe check on each punishment register
+//TODO: Fix a bug a player having multiple punishments active means only the latest punishment will get properly killed on disconnect - maybe keep a list/array/trie/whatever of timers instead of just a timer
+//TODO: Add way to end punishment.
+//TODO: Determine how web panel is going to communicate with this plugin.
+//TODO: I18N/L10N
+//TODO: Deal with Punish_Auth_Type, Punish_All_Servers, Punish_All_Mods
 //TODO: Menu
 //TODO: Separate commands
 
@@ -178,12 +184,11 @@ public Action:Command_Punish(client, args) {
 		GetClientAuthString(target_list[i], targetAuth, sizeof(targetAuth));
 		GetClientIP(target_list[i], targetIP, sizeof(targetIP));
 
-		RecordPunishmentInDB(type, setByAuth, setBy, targetAuth, targetName, targetIP, timestamp, StringToInt(time), reason); //TODO: Use this.
+		RecordPunishmentInDB(type, setByAuth, setBy, targetAuth, targetName, targetIP, timestamp, StringToInt(time), reason);
 		Call_StartForward(pmethod[addCallback]);
 		Call_PushCell(target_list[i]);
 		Call_PushString(reason);
-		decl result; //TODO: Use this.
-		Call_Finish(result);
+		Call_Finish();
 
 		if (!(pmethod[flags] & SP_NOREMOVE) && !(pmethod[flags] & SP_NOTIME) && !StrEqual(time, "0")) {
 			new Handle:punishmentInfoPack = CreateDataPack();
