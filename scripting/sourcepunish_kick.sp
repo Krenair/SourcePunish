@@ -3,11 +3,11 @@
 #include <sourcepunish>
 
 public Plugin:myinfo = {
-    name = "SourcePunish Kick",
-    author = "Alex",
-    description = "Kick plugin for SourcePunish",
-    version = "0.1",
-    url = "https://github.com/Krenair/SourcePunish"
+	name = "SourcePunish Kick",
+	author = "Alex",
+	description = "Kick plugin for SourcePunish",
+	version = "0.1",
+	url = "https://github.com/Krenair/SourcePunish"
 };
 
 public OnAllPluginsLoaded() {

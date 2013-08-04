@@ -1,13 +1,16 @@
+//TODO: Menu
+//TODO: Separate commands
+
 #include <sourcemod>
 #include <sdktools>
 #include <sourcepunish>
 
 public Plugin:myinfo = {
-    name = "SourcePunish",
-    author = "Alex, Azelphur and MonsterKiller",
-    description = "Punishment management system",
-    version = "0.03",
-    url = "https://github.com/Krenair/SourcePunish"
+	name = "SourcePunish",
+	author = "Alex, Azelphur and MonsterKiller",
+	description = "Punishment management system",
+	version = "0.03",
+	url = "https://github.com/Krenair/SourcePunish"
 }
 
 enum punishmentType {
@@ -58,6 +61,7 @@ public SQLConnected(Handle:owner, Handle:databaseHandle, const String:error[], a
 	Format(query, sizeof(query), "SELECT Punish_Type, Punish_Admin_ID, Punish_Admin_Name, Punish_Player_ID, Punish_Time, Punish_Length FROM sourcepunish_punishments WHERE UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND (Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW());", serverID);
 	SQL_TQuery(db, ActivePunishmentsLookupComplete, query);
 }
+
 public ActivePunishmentsLookupComplete(Handle:owner, Handle:query, const String:error[], any:data) {
 	if (query == INVALID_HANDLE) {
 		ThrowError("Error querying DB: %s", error);
