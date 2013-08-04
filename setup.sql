@@ -22,12 +22,12 @@ CREATE TABLE IF NOT EXISTS `sourcepunish_punishments` (
 ) ENGINE=MyISAM  DEFAULT CHARSET=latin1;
 
 CREATE TABLE IF NOT EXISTS `sourcepunish_servers` (
-	`ID` INT(11) NOT NULL AUTO_INCREMENT,
+	`Server_ID` INT(11) NOT NULL AUTO_INCREMENT,
 	`Server_IP` VARCHAR(22) NOT NULL,
 	`Server_Host` VARCHAR(40) NOT NULL,
 	`Server_Name` VARCHAR(30) NOT NULL,
-	`Server_Mod` INT(5) NOT NULL,
-	PRIMARY KEY (`ID`)
+	`Server_Mod` INT(11) NOT NULL,
+	PRIMARY KEY (`Server_ID`)
 ) ENGINE=MyISAM  DEFAULT CHARSET=latin1;
 
 CREATE TABLE IF NOT EXISTS `sourcepunish_server_mods` (
