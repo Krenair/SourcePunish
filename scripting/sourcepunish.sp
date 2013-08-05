@@ -75,13 +75,12 @@ public ActivePunishmentsLookupComplete(Handle:owner, Handle:query, const String:
 	}
 
 	while (SQL_FetchRow(query)) {
-		decl String:type[64], String:punisherAuth[64], String:punisherName[64], String:punishedAuth[64], String:reason[64];
+		decl String:type[64], String:punisherName[64], String:punishedAuth[64], String:reason[64];
 		SQL_FetchString(query, 0, type, sizeof(type));
-		SQL_FetchString(query, 1, punisherAuth, sizeof(punisherAuth));
-		SQL_FetchString(query, 2, punisherName, sizeof(punisherName));
-		SQL_FetchString(query, 3, punishedAuth, sizeof(punishedAuth));
-		SQL_FetchString(query, 4, reason, sizeof(reason));
-		new startTime = SQL_FetchInt(query, 5);
+		SQL_FetchString(query, 1, punisherName, sizeof(punisherName));
+		SQL_FetchString(query, 2, punishedAuth, sizeof(punishedAuth));
+		SQL_FetchString(query, 3, reason, sizeof(reason));
+		new startTime = SQL_FetchInt(query, 4);
 
 		for (new i = 1; i <= MaxClients; i++) {
 			decl String:auth[64];
@@ -104,7 +103,7 @@ public ActivePunishmentsLookupComplete(Handle:owner, Handle:query, const String:
 					WritePackString(punishmentInfoPack, punisherName);
 					WritePackCell(punishmentInfoPack, startTime);
 					ResetPack(punishmentInfoPack); // Move index back to beginning so we can read from it.
-					new endTime = startTime + (SQL_FetchInt(query, 6) * 60);
+					new endTime = startTime + (SQL_FetchInt(query, 5) * 60);
 					new Handle:timer = CreateTimer(float(endTime - GetTime()), PunishmentExpire, punishmentInfoPack);
 					if (punishmentRemovalTimers[i] == INVALID_HANDLE) {
 						punishmentRemovalTimers[i] = CreateArray();
@@ -311,7 +310,7 @@ public Native_RegisterPunishment(Handle:plugin, numParams) {
 	SetTrieArray(punishments, type, pmethod, sizeof(pmethod));
 
 	decl String:query[512];
-	Format(query, sizeof(query), "SELECT Punish_Type, Punish_Admin_ID, Punish_Admin_Name, Punish_Player_ID, Punish_Reason, Punish_Time, Punish_Length FROM sourcepunish_punishments WHERE Punish_Type = '%s' AND UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND (Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW());", type, serverID);
+	Format(query, sizeof(query), "SELECT Punish_Type, Punish_Admin_Name, Punish_Player_ID, Punish_Reason, Punish_Time, Punish_Length FROM sourcepunish_punishments WHERE Punish_Type = '%s' AND UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND (Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW());", type, serverID);
 	SQL_TQuery(db, ActivePunishmentsLookupComplete, query);
 
 	return true;
