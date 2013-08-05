@@ -13,7 +13,7 @@ public Plugin:myinfo = {
 new g_bNameBlocked[MAXPLAYERS + 1];
 
 public OnAllPluginsLoaded() {
-	RegisterPunishment("name", "Name change", AddPunishment, RemovePunishment);
+	RegisterPunishment("blockrename", "Name change", AddPunishment, RemovePunishment);
 	HookEvent("player_changename", Event_PlayerChangeName, EventHookMode_Pre);
 }
 

@@ -3,7 +3,6 @@
 //TODO: I18N/L10N
 //TODO: Deal with Punish_Auth_Type, Punish_All_Servers, Punish_All_Mods
 //TODO: Menu
-//TODO: Separate commands
 
 #include <sourcemod>
 #include <sdktools>
@@ -57,7 +56,6 @@ public OnPluginStart() {
 
 	punishments = CreateTrie();
 	LoadTranslations("common.phrases");
-	RegAdminCmd("sm_punish", Command_Punish, ADMFLAG_GENERIC, "Punishes a player");
 }
 
 public ActivePunishmentsLookupComplete(Handle:owner, Handle:query, const String:error[], any:data) {
@@ -117,35 +115,38 @@ public ActivePunishmentsLookupComplete(Handle:owner, Handle:query, const String:
 
 public Action:Command_Punish(client, args) {
 	new timestamp = GetTime();
-	if (args < 2) {
-		ReplyToCommand(client, "[SM] Usage: sm_punish <type> <target> [time|0] [reason]");
+	if (args < 1) {
+		ReplyToCommand(client, "[SM] Usage: sm_[add]<type> <target> [time|0] [reason]");
 		return Plugin_Handled;
 	}
 
-	decl String:type[64];
-	GetCmdArg(1, type, sizeof(type));
-	decl pmethod[punishmentType];
+	decl String:command[70], String:prefix[7];
+	GetCmdArg(0, command, sizeof(command));
+	strcopy(prefix, sizeof(prefix), command); // Get the first 6 characters.
+	new typeIndexInCommand = 3; // If the first 6 characters are not "sm_add", the type is after the "sm_" which is 3 characters long.
+	if (StrEqual(prefix, "sm_add", false)) {
+		typeIndexInCommand = 6; // Otherwise, the type is after "sm_add", which is 6 characters long.
+	}
+
+	decl String:type[64], pmethod[punishmentType];
+	strcopy(type, sizeof(type), command[typeIndexInCommand]);
 	if (!GetTrieArray(punishments, type, pmethod, sizeof(pmethod))) {
 		ReplyToCommand(client, "[SM] Punishment type %s not found.", type);
 		return Plugin_Handled;
 	}
 
-	decl String:target[64];
-
-	new reasonArgumentNum = 3;
-	decl String:time[64];
-	if (!(pmethod[flags] & SP_NOTIME)) {
-		reasonArgumentNum = 4;
-	}
-
-	decl String:fullArgString[64];
+	decl String:target[64], String:time[64], String:fullArgString[64];
 	GetCmdArgString(fullArgString, sizeof(fullArgString));
-	new pos = BreakString(fullArgString, type, sizeof(type));
-	pos = pos + BreakString(fullArgString[pos], target, sizeof(target));
+	new pos = BreakString(fullArgString, target, sizeof(target));
 
 	decl String:reason[64];
+	new reasonArgumentNum = 2;
+	if (!(pmethod[flags] & SP_NOTIME)) {
+		reasonArgumentNum = 3;
+	}
+
 	if (args >= reasonArgumentNum) {
-		if (reasonArgumentNum == 4) {
+		if (reasonArgumentNum == 3) {
 			pos = pos + BreakString(fullArgString[pos], time, sizeof(time));
 		} else {
 			strcopy(time, sizeof(time), "0");
@@ -355,6 +356,16 @@ public Native_RegisterPunishment(Handle:plugin, numParams) {
 	pmethod[flags] = GetNativeCell(5);
 
 	SetTrieArray(punishments, type, pmethod, sizeof(pmethod));
+
+	decl String:mainAddCommand[67] = "sm_", String:commandDescription[89] = "Punishes a player with a ";
+	StrCat(mainAddCommand, sizeof(mainAddCommand), type);
+	StrCat(commandDescription, sizeof(commandDescription), typeDisplayName);
+	RegAdminCmd(mainAddCommand, Command_Punish, ADMFLAG_GENERIC, commandDescription);
+	if (!(pmethod[flags] & SP_NOTIME)) {
+		decl String:addCommand[70] = "sm_add";
+		StrCat(addCommand, sizeof(addCommand), type);
+		RegAdminCmd(addCommand, Command_Punish, ADMFLAG_GENERIC, commandDescription);
+	}
 
 	decl String:query[512];
 	Format(query, sizeof(query), "SELECT Punish_Type, Punish_Admin_Name, Punish_Player_ID, Punish_Reason, Punish_Time, Punish_Length FROM sourcepunish_punishments WHERE Punish_Type = '%s' AND UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND (Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW());", type, serverID);
