@@ -17,13 +17,6 @@ public OnAllPluginsLoaded() {
 	HookEvent("player_changename", Event_PlayerChangeName, EventHookMode_Pre);
 }
 
-public Action:Command_Say(client, const String:command[], argc) {
-	if (g_bNameBlocked[client]) {
-		return Plugin_Handled;
-	}
-	return Plugin_Continue;
-}
-
 public AddPunishment(client, String:reason[]) {
 	g_bNameBlocked[client] = true;
 }
