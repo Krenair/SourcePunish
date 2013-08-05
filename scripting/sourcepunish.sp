@@ -1,4 +1,3 @@
-//TODO: Actually check for active punishments on player connect.
 //TODO: Add way to end punishment.
 //TODO: Determine how web panel is going to communicate with this plugin.
 //TODO: I18N/L10N
@@ -255,6 +254,52 @@ public OnClientDisconnect(client) {
 	}
 }
 
+public OnClientAuthorized(client, const String:auth[]) {
+	decl String:escapedAuth[64], String:query[512];
+	SQL_EscapeString(db, auth, escapedAuth, sizeof(escapedAuth));
+	Format(query, sizeof(query), "SELECT Punish_Type, Punish_Admin_Name, Punish_Reason, Punish_Time, Punish_Length FROM sourcepunish_punishments WHERE Punish_Player_ID = '%s' AND UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND (Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW());", escapedAuth, serverID);
+	SQL_TQuery(db, UsersActivePunishmentsLookupComplete, query, client);
+}
+
+public UsersActivePunishmentsLookupComplete(Handle:owner, Handle:query, const String:error[], any:client) {
+	if (query == INVALID_HANDLE) {
+		ThrowError("Error querying DB: %s", error);
+	}
+
+	while (SQL_FetchRow(query)) {
+		decl String:type[64], String:punisherName[64], String:reason[64];
+		SQL_FetchString(query, 0, type, sizeof(type));
+		SQL_FetchString(query, 2, reason, sizeof(reason));
+
+		decl pmethod[punishmentType];
+		if (!GetTrieArray(punishments, type, pmethod, sizeof(pmethod))) {
+			PrintToServer("Loaded an active punishment with unknown type %s", type);
+		}
+
+		Call_StartForward(pmethod[addCallback]);
+		Call_PushCell(client);
+		Call_PushString(reason);
+		Call_Finish();
+
+		if (!(pmethod[flags] & SP_NOREMOVE) && !(pmethod[flags] & SP_NOTIME)) {
+			SQL_FetchString(query, 1, punisherName, sizeof(punisherName));
+			new startTime = SQL_FetchInt(query, 3);
+			new Handle:punishmentInfoPack = CreateDataPack();
+			WritePackString(punishmentInfoPack, type);
+			WritePackCell(punishmentInfoPack, client);
+			WritePackString(punishmentInfoPack, punisherName);
+			WritePackCell(punishmentInfoPack, startTime);
+			ResetPack(punishmentInfoPack); // Move index back to beginning so we can read from it.
+			new endTime = startTime + (SQL_FetchInt(query, 4) * 60);
+			new Handle:timer = CreateTimer(float(endTime - GetTime()), PunishmentExpire, punishmentInfoPack);
+			if (punishmentRemovalTimers[client] == INVALID_HANDLE) {
+				punishmentRemovalTimers[client] = CreateArray();
+			}
+			PushArrayCell(punishmentRemovalTimers[client], timer);
+		}
+	}
+}
+
 public Action:PunishmentExpire(Handle:timer, Handle:punishmentInfoPack) {
 	decl String:type[64];
 	ReadPackString(punishmentInfoPack, type, sizeof(type));
@@ -279,6 +324,8 @@ public Action:PunishmentExpire(Handle:timer, Handle:punishmentInfoPack) {
 	Call_PushCell(targetClient);
 	decl result;
 	Call_Finish(result);
+
+	RemoveFromArray(punishmentRemovalTimers[targetClient], FindValueInArray(punishmentRemovalTimers[targetClient], timer)); // This timer is done, no need to try to make it more dead later.
 }
 
 public APLRes:AskPluginLoad2(Handle:myself, bool:late, String:error[], err_max) {
