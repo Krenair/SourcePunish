@@ -1,5 +1,4 @@
-//TODO: Fix ActivePunishmentsLookupComplete race condition - maybe check on each punishment register
-//TODO: Fix a bug a player having multiple punishments active means only the latest punishment will get properly killed on disconnect - maybe keep a list/array/trie/whatever of timers instead of just a timer
+//TODO: Actually check for active punishments on player connect.
 //TODO: Add way to end punishment.
 //TODO: Determine how web panel is going to communicate with this plugin.
 //TODO: I18N/L10N
@@ -34,38 +33,32 @@ new Handle:configKeyValues = INVALID_HANDLE;
 new serverID;
 
 public OnPluginStart() {
-	punishments = CreateTrie();
-	LoadTranslations("common.phrases");
-	RegAdminCmd("sm_punish", Command_Punish, ADMFLAG_GENERIC, "Punishes a player");
-
-	SQL_TConnect(SQLConnected, "default");
+	decl String:error[64];
+	db = SQL_Connect("default", true, error, sizeof(error));
+	if (db == INVALID_HANDLE) {
+		SetFailState("Failed to connect to database: %s", error);
+	}
 
 	new String:keyValueFile[128];
 	BuildPath(Path_SM, keyValueFile, sizeof(keyValueFile), "configs/sourcepunish.cfg");
 	if (!FileExists(keyValueFile)) {
-		ThrowError("configs/sourcepunish.cfg does not exist!");
+		SetFailState("configs/sourcepunish.cfg does not exist!");
 	}
 	configKeyValues = CreateKeyValues("SourcePunish");
 	FileToKeyValues(configKeyValues, keyValueFile);
 
 	if (!KvJumpToKey(configKeyValues, "Settings")) {
-		ThrowError("Settings key in config does not exist!");
+		SetFailState("Settings key in config does not exist!");
 	}
 
 	serverID = KvGetNum(configKeyValues, "ServerID", 0);
 	if (serverID < 1) {
-		ThrowError("Server ID in config is invalid! Should be at least 1");
+		SetFailState("Server ID in config is invalid! Should be at least 1");
 	}
-}
 
-public SQLConnected(Handle:owner, Handle:databaseHandle, const String:error[], any:data) {
-	if (databaseHandle == INVALID_HANDLE) {
-		ThrowError("Error connecting to DB: %s", error);
-	}
-	db = databaseHandle;
-	decl String:query[512];
-	Format(query, sizeof(query), "SELECT Punish_Type, Punish_Admin_ID, Punish_Admin_Name, Punish_Player_ID, Punish_Time, Punish_Length FROM sourcepunish_punishments WHERE UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND (Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW());", serverID);
-	SQL_TQuery(db, ActivePunishmentsLookupComplete, query);
+	punishments = CreateTrie();
+	LoadTranslations("common.phrases");
+	RegAdminCmd("sm_punish", Command_Punish, ADMFLAG_GENERIC, "Punishes a player");
 }
 
 public ActivePunishmentsLookupComplete(Handle:owner, Handle:query, const String:error[], any:data) {
@@ -82,22 +75,27 @@ public ActivePunishmentsLookupComplete(Handle:owner, Handle:query, const String:
 	}
 
 	while (SQL_FetchRow(query)) {
-		decl String:type[64], String:punisherAuth[64], String:punisherName[64], String:punishedAuth[64];
+		decl String:type[64], String:punisherAuth[64], String:punisherName[64], String:punishedAuth[64], String:reason[64];
 		SQL_FetchString(query, 0, type, sizeof(type));
 		SQL_FetchString(query, 1, punisherAuth, sizeof(punisherAuth));
 		SQL_FetchString(query, 2, punisherName, sizeof(punisherName));
 		SQL_FetchString(query, 3, punishedAuth, sizeof(punishedAuth));
-		new startTime = SQL_FetchInt(query, 4);
+		SQL_FetchString(query, 4, reason, sizeof(reason));
+		new startTime = SQL_FetchInt(query, 5);
 
 		for (new i = 1; i <= MaxClients; i++) {
 			decl String:auth[64];
 			strcopy(auth, sizeof(auth), clientAuths[i]);
 			if (StrEqual(punishedAuth, auth)) {
 				decl pmethod[punishmentType];
-				// TODO: Race condition here. If this code is run before any plugins have registered (e.g. if SourcePunish is reloaded) we won't know about any punishment types.
 				if (!GetTrieArray(punishments, type, pmethod, sizeof(pmethod))) {
 					PrintToServer("Loaded an active punishment with unknown type %s", type);
 				}
+
+				Call_StartForward(pmethod[addCallback]);
+				Call_PushCell(i);
+				Call_PushString(reason);
+				Call_Finish();
 
 				if (!(pmethod[flags] & SP_NOREMOVE) && !(pmethod[flags] & SP_NOTIME)) {
 					new Handle:punishmentInfoPack = CreateDataPack();
@@ -106,8 +104,12 @@ public ActivePunishmentsLookupComplete(Handle:owner, Handle:query, const String:
 					WritePackString(punishmentInfoPack, punisherName);
 					WritePackCell(punishmentInfoPack, startTime);
 					ResetPack(punishmentInfoPack); // Move index back to beginning so we can read from it.
-					new endTime = startTime + (SQL_FetchInt(query, 5) * 60);
-					punishmentRemovalTimers[i] = CreateTimer(float(GetTime() - endTime), PunishmentExpire, punishmentInfoPack);
+					new endTime = startTime + (SQL_FetchInt(query, 6) * 60);
+					new Handle:timer = CreateTimer(float(endTime - GetTime()), PunishmentExpire, punishmentInfoPack);
+					if (punishmentRemovalTimers[i] == INVALID_HANDLE) {
+						punishmentRemovalTimers[i] = CreateArray();
+					}
+					PushArrayCell(punishmentRemovalTimers[i], timer);
 				}
 				break;
 			}
@@ -197,7 +199,11 @@ public Action:Command_Punish(client, args) {
 			WritePackString(punishmentInfoPack, setBy);
 			WritePackCell(punishmentInfoPack, timestamp);
 			ResetPack(punishmentInfoPack); // Move index back to beginning so we can read from it.
-			punishmentRemovalTimers[target_list[i]] = CreateTimer(StringToFloat(time) * 60, PunishmentExpire, punishmentInfoPack);
+			new Handle:timer = CreateTimer(StringToFloat(time) * 60, PunishmentExpire, punishmentInfoPack);
+			if (punishmentRemovalTimers[target_list[i]] == INVALID_HANDLE) {
+				punishmentRemovalTimers[target_list[i]] = CreateArray();
+			}
+			PushArrayCell(punishmentRemovalTimers[target_list[i]], timer);
 		}
 	}
 
@@ -243,7 +249,9 @@ public PunishmentRecorded(Handle:owner, Handle:hndl, const String:error[], any:d
 
 public OnClientDisconnect(client) {
 	if (punishmentRemovalTimers[client] != INVALID_HANDLE) {
-		KillTimer(punishmentRemovalTimers[client]);
+		for (new i = 0; i < GetArraySize(punishmentRemovalTimers[client]); i++) {
+			KillTimer(GetArrayCell(punishmentRemovalTimers[client], i));
+		}
 		punishmentRemovalTimers[client] = INVALID_HANDLE;
 	}
 }
@@ -275,8 +283,8 @@ public Action:PunishmentExpire(Handle:timer, Handle:punishmentInfoPack) {
 }
 
 public APLRes:AskPluginLoad2(Handle:myself, bool:late, String:error[], err_max) {
-   CreateNative("RegisterPunishment", Native_RegisterPunishment);
-   return APLRes_Success;
+	CreateNative("RegisterPunishment", Native_RegisterPunishment);
+	return APLRes_Success;
 }
 
 public Native_RegisterPunishment(Handle:plugin, numParams) {
@@ -301,6 +309,10 @@ public Native_RegisterPunishment(Handle:plugin, numParams) {
 	pmethod[flags] = GetNativeCell(5);
 
 	SetTrieArray(punishments, type, pmethod, sizeof(pmethod));
+
+	decl String:query[512];
+	Format(query, sizeof(query), "SELECT Punish_Type, Punish_Admin_ID, Punish_Admin_Name, Punish_Player_ID, Punish_Reason, Punish_Time, Punish_Length FROM sourcepunish_punishments WHERE Punish_Type = '%s' AND UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND (Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW());", type, serverID);
+	SQL_TQuery(db, ActivePunishmentsLookupComplete, query);
 
 	return true;
 }
