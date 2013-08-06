@@ -1,4 +1,3 @@
-//TODO: Add way to end punishment.
 //TODO: Determine how web panel is going to communicate with this plugin.
 //TODO: I18N/L10N
 //TODO: Deal with Punish_Auth_Type, Punish_All_Servers, Punish_All_Mods
@@ -25,6 +24,7 @@ enum punishmentType {
 }
 
 new Handle:punishments = INVALID_HANDLE;
+new Handle:punishmentTypes = INVALID_HANDLE;
 new Handle:punishmentRemovalTimers[MAXPLAYERS + 1];
 new Handle:db = INVALID_HANDLE;
 new Handle:configKeyValues = INVALID_HANDLE;
@@ -55,6 +55,7 @@ public OnPluginStart() {
 	}
 
 	punishments = CreateTrie();
+	punishmentTypes = CreateArray();
 	LoadTranslations("common.phrases");
 }
 
@@ -103,9 +104,9 @@ public ActivePunishmentsLookupComplete(Handle:owner, Handle:query, const String:
 					new endTime = startTime + (SQL_FetchInt(query, 5) * 60);
 					new Handle:timer = CreateTimer(float(endTime - GetTime()), PunishmentExpire, punishmentInfoPack);
 					if (punishmentRemovalTimers[i] == INVALID_HANDLE) {
-						punishmentRemovalTimers[i] = CreateArray();
+						punishmentRemovalTimers[i] = CreateTrie();
 					}
-					PushArrayCell(punishmentRemovalTimers[i], timer);
+					SetTrieValue(punishmentRemovalTimers[i], type, timer);
 				}
 				break;
 			}
@@ -182,6 +183,16 @@ public Action:Command_Punish(client, args) {
 	for (new i = 0; i < target_count; i++) {
 		decl String:targetName[64], String:targetAuth[64], String:targetIP[64];
 		GetClientName(target_list[i], targetName, sizeof(targetName));
+
+		new Handle:existingTimer = INVALID_HANDLE;
+		if (punishmentRemovalTimers[target_list[i]] != INVALID_HANDLE) {
+			GetTrieValue(punishmentRemovalTimers[target_list[i]], type, existingTimer);
+			if (existingTimer != INVALID_HANDLE) {
+				ReplyToCommand(client, "[SM] %s already has a punishment of type %s.", targetName, type);
+				return Plugin_Handled;
+			}
+		}
+
 		GetClientAuthString(target_list[i], targetAuth, sizeof(targetAuth));
 		GetClientIP(target_list[i], targetIP, sizeof(targetIP));
 
@@ -200,9 +211,9 @@ public Action:Command_Punish(client, args) {
 			ResetPack(punishmentInfoPack); // Move index back to beginning so we can read from it.
 			new Handle:timer = CreateTimer(StringToFloat(time) * 60, PunishmentExpire, punishmentInfoPack);
 			if (punishmentRemovalTimers[target_list[i]] == INVALID_HANDLE) {
-				punishmentRemovalTimers[target_list[i]] = CreateArray();
+				punishmentRemovalTimers[target_list[i]] = CreateTrie();
 			}
-			PushArrayCell(punishmentRemovalTimers[target_list[i]], timer);
+			SetTrieValue(punishmentRemovalTimers[target_list[i]], type, timer);
 		}
 	}
 
@@ -246,10 +257,142 @@ public PunishmentRecorded(Handle:owner, Handle:hndl, const String:error[], any:d
 	}
 }
 
+public Action:Command_UnPunish(client, args) {
+	new timestamp = GetTime();
+	if (args < 1) {
+		ReplyToCommand(client, "[SM] Usage: sm_<un|del><type> <target> [reason]");
+		return Plugin_Handled;
+	}
+
+	decl String:command[70], String:prefix[7];
+	GetCmdArg(0, command, sizeof(command));
+	strcopy(prefix, sizeof(prefix), command); // Get the first 6 characters.
+	new typeIndexInCommand = 5; // If the first 6 characters are not "sm_del", the type is after the "sm_un" which is 5 characters long.
+	if (StrEqual(prefix, "sm_del", false)) {
+		typeIndexInCommand = 6; // Otherwise, the type is after "sm_del", which is 6 characters long.
+	}
+
+	decl String:type[64], pmethod[punishmentType];
+	strcopy(type, sizeof(type), command[typeIndexInCommand]);
+	if (!GetTrieArray(punishments, type, pmethod, sizeof(pmethod))) {
+		ReplyToCommand(client, "[SM] Punishment type %s not found.", type);
+		return Plugin_Handled;
+	}
+
+	decl String:target[64], String:fullArgString[64];
+	GetCmdArgString(fullArgString, sizeof(fullArgString));
+	new pos = BreakString(fullArgString, target, sizeof(target));
+
+	decl String:reason[64];
+	new reasonArgumentNum = 2;
+
+	if (args >= reasonArgumentNum) {
+		strcopy(reason, sizeof(reason), fullArgString[pos]);
+	} else {
+		reason[0] = '\0'; // Make it safe per http://wiki.alliedmods.net/Introduction_to_SourcePawn#Caveats
+	}
+
+	new String:target_name[MAX_TARGET_LENGTH]; // Stores the noun identifying the target(s)
+	new target_list[MAXPLAYERS], target_count; // Array to store the clients, and also a variable to store the number of clients
+	new bool:tn_is_ml; // Stores whether the noun must be translated
+
+	if ((target_count = ProcessTargetString(
+		target,
+		client,
+		target_list,
+		MAXPLAYERS,
+		COMMAND_FILTER_CONNECTED, // We want to allow targetting even players who are not fully in-game but connected
+		target_name,
+		sizeof(target_name),
+		tn_is_ml
+	)) <= 0) {
+		// Reply to the admin with a failure message
+		ReplyToTargetError(client, target_count);
+		return Plugin_Handled;
+	}
+
+	decl String:escapedType[64], String:adminName[64], String:adminAuth[64], String:escapedAdminName[64], String:escapedAdminAuth[64];
+	SQL_EscapeString(db, type, escapedType, sizeof(escapedType));
+	GetClientName(client, adminName, sizeof(adminName));
+	SQL_EscapeString(db, adminName, escapedAdminName, sizeof(escapedAdminName));
+	GetClientAuthString(client, adminAuth, sizeof(adminAuth));
+	SQL_EscapeString(db, adminAuth, escapedAdminAuth, sizeof(escapedAdminAuth));
+
+
+	for (new i = 0; i < target_count; i++) {
+		decl String:targetName[64], String:targetAuth[64], String:targetIP[64];
+		GetClientName(target_list[i], targetName, sizeof(targetName));
+
+		new Handle:existingTimer = INVALID_HANDLE;
+		if (punishmentRemovalTimers[target_list[i]] == INVALID_HANDLE) {
+			ReplyToCommand(client, "[SM] %s has no active punishments.", targetName);
+			return Plugin_Handled;
+		}
+		GetTrieValue(punishmentRemovalTimers[target_list[i]], type, existingTimer);
+		if (existingTimer == INVALID_HANDLE) {
+			ReplyToCommand(client, "[SM] %s has not been punished with %s...", targetName, type);
+			return Plugin_Handled;
+		}
+
+		GetClientAuthString(target_list[i], targetAuth, sizeof(targetAuth));
+		GetClientIP(target_list[i], targetIP, sizeof(targetIP));
+
+		Call_StartForward(pmethod[removeCallback]);
+		Call_PushCell(target_list[i]);
+		Call_Finish();
+
+		decl String:query[512], String:escapedTargetAuth[64];
+		SQL_EscapeString(db, targetAuth, escapedTargetAuth, sizeof(escapedTargetAuth));
+		Format(query, sizeof(query), "UPDATE sourcepunish_punishments SET UnPunish = 1, UnPunish_Admin_Name = '%s', UnPunish_Admin_ID = '%s', UnPunish_Time = %i, UnPunish_Reason = '%s' WHERE UnPunish = 0 AND (Punish_Server_ID = %i || Punish_All_Servers = 1) AND Punish_Player_ID = '%s' AND Punish_Type = '%s' AND (Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW());", escapedAdminName, escapedAdminAuth, timestamp, reason, serverID, escapedTargetAuth, escapedType);
+
+		new Handle:punishmentRemovalInfoPack = CreateDataPack();
+		WritePackCell(punishmentRemovalInfoPack, client);
+		WritePackCell(punishmentRemovalInfoPack, target_list[i]);
+		WritePackString(punishmentRemovalInfoPack, type);
+		WritePackString(punishmentRemovalInfoPack, adminName);
+		WritePackString(punishmentRemovalInfoPack, targetName);
+		ResetPack(punishmentRemovalInfoPack); // Move index back to beginning so we can read from it.
+
+		SQL_TQuery(db, UnpunishedUser, query, punishmentRemovalInfoPack);
+
+		new Handle:timer = INVALID_HANDLE;
+		GetTrieValue(punishmentRemovalTimers[target_list[i]], type, timer);
+		KillTimer(timer);
+		SetTrieValue(punishmentRemovalTimers[target_list[i]], type, INVALID_HANDLE);
+	}
+	return Plugin_Handled;
+}
+
+public UnpunishedUser(Handle:owner, Handle:query, const String:error[], any:punishmentRemovalInfoPack) {
+	new adminClient = ReadPackCell(punishmentRemovalInfoPack);
+
+	if (query == INVALID_HANDLE) {
+		ThrowError("Error querying DB: %s", error);
+		PrintToChat(adminClient, "[SM] Error while unpunishing user.");
+	} else {
+		decl String:type[64], String:adminName[64], String:targetName[64];
+
+		new targetClient = ReadPackCell(punishmentRemovalInfoPack);
+		ReadPackString(punishmentRemovalInfoPack, type, sizeof(type));
+		ReadPackString(punishmentRemovalInfoPack, adminName, sizeof(adminName));
+		ReadPackString(punishmentRemovalInfoPack, targetName, sizeof(targetName));
+
+		PrintToChat(adminClient, "[SM] Removed %s punishment from %s.", type, targetName);
+		PrintToChat(targetClient, "[SM] Your %s punishment has been removed by %s.", type, adminName);
+	}
+}
+
 public OnClientDisconnect(client) {
 	if (punishmentRemovalTimers[client] != INVALID_HANDLE) {
-		for (new i = 0; i < GetArraySize(punishmentRemovalTimers[client]); i++) {
-			KillTimer(GetArrayCell(punishmentRemovalTimers[client], i));
+		for (new i = 0; i < GetArraySize(punishmentTypes); i++) {
+			// Check each punishment type applied to this user.
+			decl String:punishmentName[64];
+			GetArrayString(punishmentTypes, i, punishmentName, sizeof(punishmentName)); // Get punishment type name
+			new Handle:timer = INVALID_HANDLE;
+			GetTrieValue(punishmentRemovalTimers[client], punishmentName, timer); // Get the timer for this player and punishment type
+			if (timer != INVALID_HANDLE) {
+				KillTimer(timer);
+			}
 		}
 		punishmentRemovalTimers[client] = INVALID_HANDLE;
 	}
@@ -356,15 +499,27 @@ public Native_RegisterPunishment(Handle:plugin, numParams) {
 	pmethod[flags] = GetNativeCell(5);
 
 	SetTrieArray(punishments, type, pmethod, sizeof(pmethod));
+	PushArrayString(punishmentTypes, type);
 
-	decl String:mainAddCommand[67] = "sm_", String:commandDescription[89] = "Punishes a player with a ";
+	decl String:mainAddCommand[67] = "sm_",
+		 String:mainRemoveCommand[69] = "sm_un",
+		 String:addCommandDescription[89] = "Punishes a player with a ",
+		 String:removeCommandDescription[103] = "Removes punishment from player of type ";
 	StrCat(mainAddCommand, sizeof(mainAddCommand), type);
-	StrCat(commandDescription, sizeof(commandDescription), typeDisplayName);
-	RegAdminCmd(mainAddCommand, Command_Punish, ADMFLAG_GENERIC, commandDescription);
+	StrCat(addCommandDescription, sizeof(addCommandDescription), typeDisplayName);
+	RegAdminCmd(mainAddCommand, Command_Punish, ADMFLAG_GENERIC, addCommandDescription);
+
+	StrCat(mainRemoveCommand, sizeof(mainRemoveCommand), type);
+	StrCat(removeCommandDescription, sizeof(removeCommandDescription), typeDisplayName);
+	RegAdminCmd(mainRemoveCommand, Command_UnPunish, ADMFLAG_GENERIC, removeCommandDescription);
+
 	if (!(pmethod[flags] & SP_NOTIME)) {
-		decl String:addCommand[70] = "sm_add";
+		decl String:addCommand[70] = "sm_add", String:removeCommand[70] = "sm_del";
 		StrCat(addCommand, sizeof(addCommand), type);
-		RegAdminCmd(addCommand, Command_Punish, ADMFLAG_GENERIC, commandDescription);
+		RegAdminCmd(addCommand, Command_Punish, ADMFLAG_GENERIC, addCommandDescription);
+
+		StrCat(removeCommand, sizeof(removeCommand), type);
+		RegAdminCmd(removeCommand, Command_UnPunish, ADMFLAG_GENERIC, removeCommandDescription);
 	}
 
 	decl String:query[512];
