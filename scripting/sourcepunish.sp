@@ -15,7 +15,7 @@ public Plugin:myinfo = {
 	name = "SourcePunish",
 	author = "Alex, Azelphur and MonsterKiller",
 	description = "Punishment management system",
-	version = "0.03",
+	version = "0.04",
 	url = "https://github.com/Krenair/SourcePunish"
 }
 
