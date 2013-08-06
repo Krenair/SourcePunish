@@ -1,7 +1,11 @@
-//TODO: Determine how web panel is going to communicate with this plugin.
-//TODO: I18N/L10N
-//TODO: Deal with Punish_Auth_Type, Punish_All_Servers, Punish_All_Mods
 //TODO: Menu
+
+//TODO: Internationalisation/localisation
+//TODO: Decide what to do with Punish_Auth_Type
+//TODO: Punish_All_Servers - need some way to set this without SQL access
+//TODO: Punish_All_Mods - SQL queries need to check this and needs to be changeable without SQL access
+//TODO: Determine how web panel is going to communicate with this plugin.
+//TODO: Add a README and licensing information
 
 #include <sourcemod>
 #include <sdktools>
