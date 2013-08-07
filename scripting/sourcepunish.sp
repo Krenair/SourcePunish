@@ -385,6 +385,7 @@ public Action:Command_UnPunish(client, args) {
 
 		new Handle:existingTimer = INVALID_HANDLE;
 		if (punishmentRemovalTimers[target_list[i]] == INVALID_HANDLE) {
+			// TODO: This is wrong and won't work properly. Check DB instead.
 			ReplyToCommand(client, "[SM] %s has no active punishments.", targetName);
 			return Plugin_Handled;
 		}
@@ -683,10 +684,50 @@ AdminMenu_PunishmentProcessAction(TopMenuAction:action, client, String:buffer[],
 		new Handle:menu = CreateMenu(MenuHandler_Target);
 		SetMenuTitle(menu, title);
 		SetMenuExitBackButton(menu, true);
-		// TODO: When removing, only show targets who have that type of punishment
-		AddTargetsToMenu(menu, 0, false, false);
-		DisplayMenu(menu, client, MENU_TIME_FOREVER);
+		if (addingPunishment) {
+			AddTargetsToMenu(menu, 0, false, false);
+			DisplayMenu(menu, client, MENU_TIME_FOREVER);
+		} else {
+			decl String:query[512];
+			new Handle:menuSelectDataPack = CreateDataPack();
+			WritePackCell(menuSelectDataPack, client);
+			WritePackCell(menuSelectDataPack, _:menu);
+			ResetPack(menuSelectDataPack);
+			Format(query, sizeof(query), "SELECT DISTINCT Punish_Player_ID FROM sourcepunish_punishments WHERE Punish_Type = '%s' AND UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) || Punish_Length = 0);", pmethod[name], serverID);
+			SQL_TQuery(db, FoundPlayersWithActivePunishment, query, menuSelectDataPack);
+		}
 	}
+}
+
+public FoundPlayersWithActivePunishment(Handle:owner, Handle:query, const String:error[], any:menuSelectDataPack) {
+	new client = ReadPackCell(menuSelectDataPack);
+	new Handle:menu = Handle:ReadPackCell(menuSelectDataPack);
+	if (query == INVALID_HANDLE) {
+		ThrowError("Error querying DB: %s", error);
+	}
+	new Handle:clientAuths = CreateTrie();
+	for (new i = 1; i <= MaxClients; i++) {
+		if (IsClientConnected(i)) {
+			decl String:auth[64];
+			GetClientAuthString(i, auth, sizeof(auth));
+			SetTrieValue(clientAuths, auth, i);
+		}
+	}
+
+	while (SQL_FetchRow(query)) {
+		decl String:targetAuth[64];
+		SQL_FetchString(query, 0, targetAuth, sizeof(targetAuth));
+		new target;
+		new online = GetTrieValue(clientAuths, targetAuth, target);
+		if (online) {
+			decl String:targetUserId[64], String:targetName[256], String:display[100];
+			IntToString(GetClientUserId(target), targetUserId, sizeof(targetUserId));
+			GetClientName(target, targetName, sizeof(targetName));
+			Format(display, sizeof(display), "%s (%s)", targetName, targetUserId);
+			AddMenuItem(menu, targetUserId, display);
+		}
+	}
+	DisplayMenu(menu, client, MENU_TIME_FOREVER);
 }
 
 public MenuHandler_Target(Handle:menu, MenuAction:action, client, param) {
@@ -852,17 +893,6 @@ public MenuHandler_Reason(Handle:menu, MenuAction:action, client, param) {
 			GetClientAuthString(client, adminAuth, sizeof(adminAuth));
 			SQL_EscapeString(db, adminAuth, escapedAdminAuth, sizeof(escapedAdminAuth));
 
-			new Handle:existingTimer = INVALID_HANDLE;
-			if (punishmentRemovalTimers[adminMenuClientStatusTarget[client]] == INVALID_HANDLE) {
-				PrintToChat(client, "[SM] %s has no active punishments.", targetName);
-				return;
-			}
-			GetTrieValue(punishmentRemovalTimers[adminMenuClientStatusTarget[client]], pmethod[name], existingTimer);
-			if (existingTimer == INVALID_HANDLE) {
-				PrintToChat(client, "[SM] %s has not been punished with %s...", targetName, pmethod[name]);
-				return;
-			}
-
 			GetClientAuthString(adminMenuClientStatusTarget[client], targetAuth, sizeof(targetAuth));
 			GetClientIP(adminMenuClientStatusTarget[client], targetIP, sizeof(targetIP));
 
@@ -872,7 +902,7 @@ public MenuHandler_Reason(Handle:menu, MenuAction:action, client, param) {
 
 			decl String:query[512], String:escapedTargetAuth[64];
 			SQL_EscapeString(db, targetAuth, escapedTargetAuth, sizeof(escapedTargetAuth));
-			Format(query, sizeof(query), "UPDATE sourcepunish_punishments SET UnPunish = 1, UnPunish_Admin_Name = '%s', UnPunish_Admin_ID = '%s', UnPunish_Time = %i, UnPunish_Reason = '%s' WHERE UnPunish = 0 AND (Punish_Server_ID = %i || Punish_All_Servers = 1) AND Punish_Player_ID = '%s' AND Punish_Type = '%s' AND (Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW());", escapedAdminName, escapedAdminAuth, timestamp, reason, serverID, escapedTargetAuth, escapedType);
+			Format(query, sizeof(query), "UPDATE sourcepunish_punishments SET UnPunish = 1, UnPunish_Admin_Name = '%s', UnPunish_Admin_ID = '%s', UnPunish_Time = %i, UnPunish_Reason = '%s' WHERE UnPunish = 0 AND (Punish_Server_ID = %i || Punish_All_Servers = 1) AND Punish_Player_ID = '%s' AND Punish_Type = '%s' AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) || Punish_Length = 0);", escapedAdminName, escapedAdminAuth, timestamp, reason, serverID, escapedTargetAuth, escapedType);
 
 			new Handle:punishmentRemovalInfoPack = CreateDataPack();
 			WritePackCell(punishmentRemovalInfoPack, client);
@@ -884,10 +914,14 @@ public MenuHandler_Reason(Handle:menu, MenuAction:action, client, param) {
 
 			SQL_TQuery(db, UnpunishedUser, query, punishmentRemovalInfoPack);
 
-			new Handle:timer = INVALID_HANDLE;
-			GetTrieValue(punishmentRemovalTimers[adminMenuClientStatusTarget[client]], pmethod[name], timer);
-			KillTimer(timer);
-			SetTrieValue(punishmentRemovalTimers[adminMenuClientStatusTarget[client]], pmethod[name], INVALID_HANDLE);
+			if (punishmentRemovalTimers[adminMenuClientStatusTarget[client]] != INVALID_HANDLE) {
+				new Handle:timer = INVALID_HANDLE;
+				GetTrieValue(punishmentRemovalTimers[adminMenuClientStatusTarget[client]], pmethod[name], timer);
+				if (timer != INVALID_HANDLE) {
+					KillTimer(timer);
+					SetTrieValue(punishmentRemovalTimers[adminMenuClientStatusTarget[client]], pmethod[name], INVALID_HANDLE);
+				}
+			}
 		}
 	}
 }
