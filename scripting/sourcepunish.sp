@@ -1,5 +1,3 @@
-//TODO: Menu
-
 //TODO: Internationalisation/localisation
 //TODO: Decide what to do with Punish_Auth_Type
 //TODO: Punish_All_Servers - need some way to set this without SQL access
@@ -8,14 +6,16 @@
 //TODO: Add a README and licensing information
 
 #include <sourcemod>
-#include <sdktools>
 #include <sourcepunish>
+
+#undef REQUIRE_PLUGIN
+#include <adminmenu>
 
 public Plugin:myinfo = {
 	name = "SourcePunish",
 	author = "Alex, Azelphur and MonsterKiller",
 	description = "Punishment management system",
-	version = "0.04",
+	version = "0.05",
 	url = "https://github.com/Krenair/SourcePunish"
 }
 
@@ -27,12 +27,27 @@ enum punishmentType {
 	flags,
 }
 
+enum adminMenuStatus {
+	bool:adding,
+	String:punishmentTypeStr[64],
+}
+
 new Handle:punishments = INVALID_HANDLE;
 new Handle:punishmentTypes = INVALID_HANDLE;
 new Handle:punishmentRemovalTimers[MAXPLAYERS + 1];
 new Handle:db = INVALID_HANDLE;
-new Handle:configKeyValues = INVALID_HANDLE;
+new Handle:adminMenu = INVALID_HANDLE;
+new Handle:adminMenuPunishmentItemsToAdd = INVALID_HANDLE;
+new Handle:adminMenuPunishmentItems = INVALID_HANDLE;
+new bool:adminMenuClientStatusAdding[MAXPLAYERS + 1];
+new String:adminMenuClientStatusType[MAXPLAYERS + 1][64];
+new adminMenuClientStatusTarget[MAXPLAYERS + 1];
+new adminMenuClientStatusDuration[MAXPLAYERS + 1];
 new serverID;
+new configSection = 0;
+new Handle:defaultReasons = INVALID_HANDLE;
+new Handle:defaultTimes = INVALID_HANDLE;
+new Handle:defaultTimeKeys = INVALID_HANDLE;
 
 public OnPluginStart() {
 	decl String:error[64];
@@ -46,21 +61,62 @@ public OnPluginStart() {
 	if (!FileExists(keyValueFile)) {
 		SetFailState("configs/sourcepunish.cfg does not exist!");
 	}
-	configKeyValues = CreateKeyValues("SourcePunish");
-	FileToKeyValues(configKeyValues, keyValueFile);
 
-	if (!KvJumpToKey(configKeyValues, "Settings")) {
-		SetFailState("Settings key in config does not exist!");
-	}
+	defaultReasons = CreateArray(100);
+	defaultTimes = CreateTrie();
+	defaultTimeKeys = CreateArray(16);
 
-	serverID = KvGetNum(configKeyValues, "ServerID", 0);
+	new Handle:smc = SMC_CreateParser();
+	SMC_SetReaders(smc, SMC_NewSection, SMC_KeyValue, SMC_EndSection);
+	SMC_ParseFile(smc, keyValueFile);
+
 	if (serverID < 1) {
 		SetFailState("Server ID in config is invalid! Should be at least 1");
 	}
 
+	// If the admin menu is already ready, run the hook manually.
+	if (LibraryExists("adminmenu") && ((adminMenu = GetAdminTopMenu()) != INVALID_HANDLE)) {
+		OnAdminMenuReady(adminMenu);
+	}
+
 	punishments = CreateTrie();
-	punishmentTypes = CreateArray();
+	punishmentTypes = CreateArray(64);
+	adminMenuPunishmentItemsToAdd = CreateArray();
+	adminMenuPunishmentItems = CreateTrie();
 	LoadTranslations("common.phrases");
+}
+
+public SMCResult:SMC_KeyValue(Handle:smc, const String:key[], const String:value[], bool:key_quotes, bool:value_quotes) {
+	switch (configSection) {
+		case 0: {
+			if (StrEqual(key, "ServerID")) {
+				serverID = StringToInt(value);
+			}
+		}
+		case 1: {
+			PushArrayString(defaultReasons, value);
+		}
+		case 2: {
+			PushArrayString(defaultTimeKeys, key);
+			SetTrieString(defaultTimes, key, value);
+		}
+	}
+	return SMCParse_Continue;
+}
+
+public SMCResult:SMC_NewSection(Handle:smc, const String:sectionName[], bool:opt_quotes) {
+	configSection = 0;
+	if (StrEqual(sectionName, "DefaultReasons", false)) {
+		configSection = 1;
+	} else if (StrEqual(sectionName, "DefaultTimes", false)) {
+		configSection = 2;
+	}
+	return SMCParse_Continue;
+}
+
+public SMCResult:SMC_EndSection(Handle:smc) {
+	configSection = 0;
+	return SMCParse_Continue;
 }
 
 public ActivePunishmentsLookupComplete(Handle:owner, Handle:query, const String:error[], any:data) {
@@ -526,9 +582,312 @@ public Native_RegisterPunishment(Handle:plugin, numParams) {
 		RegAdminCmd(removeCommand, Command_UnPunish, ADMFLAG_GENERIC, removeCommandDescription);
 	}
 
+	if (adminMenu == INVALID_HANDLE) {
+		new Handle:itemInfoPack = CreateDataPack();
+		WritePackString(itemInfoPack, type);
+		WritePackString(itemInfoPack, mainAddCommand);
+		WritePackString(itemInfoPack, mainRemoveCommand);
+		ResetPack(itemInfoPack); // Move index back to beginning so we can read from it.
+		PushArrayCell(adminMenuPunishmentItemsToAdd, itemInfoPack);
+	} else {
+		AddPunishmentMenuItems(pmethod, mainAddCommand, mainRemoveCommand);
+	}
+
 	decl String:query[512];
 	Format(query, sizeof(query), "SELECT Punish_Type, Punish_Admin_Name, Punish_Player_ID, Punish_Reason, Punish_Time, Punish_Length FROM sourcepunish_punishments WHERE Punish_Type = '%s' AND UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND (Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW());", type, serverID);
 	SQL_TQuery(db, ActivePunishmentsLookupComplete, query);
 
 	return true;
+}
+
+public OnLibraryRemoved(const String:libraryName[]) {
+	if (StrEqual(libraryName, "adminmenu")) {
+		adminMenu = INVALID_HANDLE;
+	}
+}
+
+AddPunishmentMenuItems(pmethod[punishmentType], String:mainAddCommand[], String:mainRemoveCommand[]) {
+	new TopMenuObject:playerCommands = FindTopMenuCategory(adminMenu, ADMINMENU_PLAYERCOMMANDS);
+	decl String:addObjectName[76], String:removeObjectName[78];
+
+	Format(addObjectName, sizeof(addObjectName), "%s_menuitem", mainAddCommand[3]);
+	SetTrieArray(adminMenuPunishmentItems, addObjectName, pmethod, sizeof(pmethod), true);
+	AddToTopMenu(adminMenu, addObjectName, TopMenuObject_Item, AdminMenu_AddPunishment, playerCommands, mainAddCommand, ADMFLAG_GENERIC);
+
+	if (!(pmethod[flags] & SP_NOREMOVE)) {
+		Format(removeObjectName, sizeof(removeObjectName), "%s_menuitem", mainRemoveCommand[3]);
+		SetTrieArray(adminMenuPunishmentItems, removeObjectName, pmethod, sizeof(pmethod), true);
+		AddToTopMenu(adminMenu, removeObjectName, TopMenuObject_Item, AdminMenu_RemovePunishment, playerCommands, mainAddCommand, ADMFLAG_GENERIC);
+	}
+}
+
+public OnAdminMenuReady(Handle:topMenu) {
+	adminMenu = topMenu;
+	if (adminMenuPunishmentItemsToAdd == INVALID_HANDLE) {
+		return;
+	}
+	for (new i = 0; i < GetArraySize(adminMenuPunishmentItemsToAdd); i++) {
+		new Handle:itemInfoPack = GetArrayCell(adminMenuPunishmentItemsToAdd, i);
+
+		decl pmethod[punishmentType], String:type[64], String:mainAddCommand[67], String:mainRemoveCommand[69];
+		ReadPackString(itemInfoPack, type, sizeof(type));
+		ReadPackString(itemInfoPack, mainAddCommand, sizeof(mainAddCommand));
+		ReadPackString(itemInfoPack, mainRemoveCommand, sizeof(mainRemoveCommand));
+		ResetPack(itemInfoPack); // Move index back to beginning so we can read from it.
+		GetTrieArray(punishments, type, pmethod, sizeof(pmethod));
+
+		AddPunishmentMenuItems(pmethod, mainAddCommand, mainRemoveCommand);
+	}
+}
+
+IdentifyPunishmentTypeFromMenuObjectID(pmethod[punishmentType], TopMenuObject:objectID) {
+	decl String:objName[64];
+	GetTopMenuObjName(adminMenu, objectID, objName, sizeof(objName));
+	GetTrieArray(adminMenuPunishmentItems, objName, pmethod, sizeof(pmethod));
+}
+
+GetDisplayTextForTypeAndAction(String:type[], bool:addingPunishment, String:buffer[], maxlen) {
+	if (addingPunishment) {
+		Format(buffer, maxlen, "%s", type);
+	} else {
+		decl String:typeCopy[64];
+		strcopy(typeCopy, sizeof(typeCopy), type);
+		typeCopy[0] = CharToLower(typeCopy[0]);
+		Format(buffer, maxlen, "Un%s", typeCopy);
+	}
+}
+
+public AdminMenu_AddPunishment(Handle:topMenu, TopMenuAction:action, TopMenuObject:objectID, client, String:buffer[], maxlength) {
+	decl String:typeDisplayText[100], pmethod[punishmentType];
+	IdentifyPunishmentTypeFromMenuObjectID(pmethod, objectID);
+	GetDisplayTextForTypeAndAction(pmethod[displayName], true, typeDisplayText, sizeof(typeDisplayText));
+	AdminMenu_PunishmentProcessAction(action, client, buffer, maxlength, typeDisplayText, pmethod, true);
+}
+
+public AdminMenu_RemovePunishment(Handle:topMenu, TopMenuAction:action, TopMenuObject:objectID, client, String:buffer[], maxlength) {
+	decl String:typeDisplayText[100], pmethod[punishmentType];
+	IdentifyPunishmentTypeFromMenuObjectID(pmethod, objectID);
+	GetDisplayTextForTypeAndAction(pmethod[displayName], false, typeDisplayText, sizeof(typeDisplayText));
+	AdminMenu_PunishmentProcessAction(action, client, buffer, maxlength, typeDisplayText, pmethod, false);
+}
+
+AdminMenu_PunishmentProcessAction(TopMenuAction:action, client, String:buffer[], maxlength, String:typeDisplayText[], pmethod[punishmentType], bool:addingPunishment){
+	if (action == TopMenuAction_DisplayOption) {
+		Format(buffer, maxlength, "[SP] %s player", typeDisplayText);
+	} else if (action == TopMenuAction_SelectOption) {
+		adminMenuClientStatusAdding[client] = addingPunishment;
+		strcopy(adminMenuClientStatusType[client], sizeof(adminMenuClientStatusType[]), pmethod[name]);
+		decl String:title[100];
+		Format(title, sizeof(title), "%s player", typeDisplayText);
+
+		new Handle:menu = CreateMenu(MenuHandler_Target);
+		SetMenuTitle(menu, title);
+		SetMenuExitBackButton(menu, true);
+		// TODO: When removing, only show targets who have that type of punishment
+		AddTargetsToMenu(menu, 0, false, false);
+		DisplayMenu(menu, client, MENU_TIME_FOREVER);
+	}
+}
+
+public MenuHandler_Target(Handle:menu, MenuAction:action, client, param) {
+	// param is either the way of cancelling or the selected item position
+	if (action == MenuAction_End) {
+		CloseHandle(menu);
+	} else if (action == MenuAction_Cancel) {
+		if (param == MenuCancel_ExitBack && adminMenu != INVALID_HANDLE) {
+			DisplayTopMenu(adminMenu, client, TopMenuPosition_LastCategory);
+		}
+	} else if (action == MenuAction_Select) {
+		decl String:info[32];
+		GetMenuItem(menu, param, info, sizeof(info));
+		new targetUserid = StringToInt(info), target = GetClientOfUserId(targetUserid);
+		if (target == 0) {
+			PrintToChat(client, "[SM] %t", "Player no longer available");
+		} else if (!CanUserTarget(client, target)) {
+			PrintToChat(client, "[SM] %t", "Unable to target");
+		} else {
+			adminMenuClientStatusTarget[client] = target;
+
+			decl pmethod[punishmentType];
+			GetTrieArray(punishments, adminMenuClientStatusType[client], pmethod, sizeof(pmethod));
+
+			decl String:title[100], String:typeForTitle[64], String:targetName[64];
+			GetDisplayTextForTypeAndAction(pmethod[displayName], adminMenuClientStatusAdding[client], typeForTitle, sizeof(typeForTitle));
+			GetClientName(target, targetName, sizeof(targetName));
+			Format(title, sizeof(title), "%s %s for:", typeForTitle, targetName);
+
+			if (adminMenuClientStatusAdding[client] && !(pmethod[flags] & SP_NOTIME)) {
+				// Open duration menu if we're adding AND the punishment type does not have the NOTIME bit set
+				new Handle:durationMenu = CreateMenu(MenuHandler_Duration);
+				// TODO: Intercept chat messages for durations
+				SetMenuTitle(durationMenu, title);
+				SetMenuExitBackButton(durationMenu, true);
+				for (new i = 0; i < GetArraySize(defaultTimeKeys); i++) {
+					decl String:key[16], String:value[32];
+					GetArrayString(defaultTimeKeys, i, key, sizeof(key));
+					GetTrieString(defaultTimes, key, value, sizeof(value));
+					AddMenuItem(durationMenu, key, value);
+				}
+				DisplayMenu(durationMenu, client, MENU_TIME_FOREVER);
+			} else {
+				// Otherwise, open the reason menu
+				CreateReasonMenu(client, title);
+			}
+		}
+	}
+}
+
+CreateReasonMenu(client, String:title[]) {
+	new Handle:reasonMenu = CreateMenu(MenuHandler_Reason);
+	// TODO: Intercept chat messages for reasons
+	SetMenuTitle(reasonMenu, title);
+	SetMenuExitBackButton(reasonMenu, true);
+
+	for (new i = 0; i < GetArraySize(defaultReasons); i++) {
+		decl String:defaultReason[100], String:key[8];
+		IntToString(i, key, sizeof(key));
+		GetArrayString(defaultReasons, i, defaultReason, sizeof(defaultReason));
+		AddMenuItem(reasonMenu, key, defaultReason);
+	}
+	DisplayMenu(reasonMenu, client, MENU_TIME_FOREVER);
+}
+
+public MenuHandler_Duration(Handle:menu, MenuAction:action, client, param) {
+	// param is either the way of cancelling or the selected item position
+	if (action == MenuAction_End) {
+		CloseHandle(menu);
+	} else if (action == MenuAction_Cancel) {
+		if (param == MenuCancel_ExitBack && adminMenu != INVALID_HANDLE) {
+			DisplayTopMenu(adminMenu, client, TopMenuPosition_LastCategory);
+		}
+	} else if (action == MenuAction_Select) {
+		decl String:info[32];
+		GetMenuItem(menu, param, info, sizeof(info));
+		new durationMinutes = StringToInt(info);
+		adminMenuClientStatusDuration[client] = durationMinutes;
+
+		decl pmethod[punishmentType];
+		GetTrieArray(punishments, adminMenuClientStatusType[client], pmethod, sizeof(pmethod));
+
+		decl String:title[100], String:typeForTitle[64], String:targetName[64];
+		GetDisplayTextForTypeAndAction(pmethod[displayName], adminMenuClientStatusAdding[client], typeForTitle, sizeof(typeForTitle));
+		GetClientName(adminMenuClientStatusTarget[client], targetName, sizeof(targetName));
+		Format(title, sizeof(title), "%s %s for:", typeForTitle, targetName);
+
+		CreateReasonMenu(client, title);
+	}
+}
+
+public MenuHandler_Reason(Handle:menu, MenuAction:action, client, param) {
+	// param is either the way of cancelling or the selected item position
+	if (action == MenuAction_End) {
+		CloseHandle(menu);
+	} else if (action == MenuAction_Cancel) {
+		if (param == MenuCancel_ExitBack && adminMenu != INVALID_HANDLE) {
+			DisplayTopMenu(adminMenu, client, TopMenuPosition_LastCategory);
+		}
+	} else if (action == MenuAction_Select) {
+		new timestamp = GetTime();
+		decl String:reason[64];
+		GetArrayString(defaultReasons, param, reason, sizeof(reason));
+
+		decl pmethod[punishmentType];
+		GetTrieArray(punishments, adminMenuClientStatusType[client], pmethod, sizeof(pmethod));
+
+		if (!IsClientConnected(adminMenuClientStatusTarget[client])) {
+			PrintToChat(client, "[SM] Target is not connected.");
+			return;
+		}
+
+		decl String:targetName[64], String:targetAuth[64], String:targetIP[64];
+		GetClientName(adminMenuClientStatusTarget[client], targetName, sizeof(targetName));
+		if (!CanUserTarget(client, adminMenuClientStatusTarget[client])) {
+			PrintToChat(client, "[SM] Can't target %s.", targetName);
+			return;
+		}
+
+		if (adminMenuClientStatusAdding[client]) {
+			decl String:setBy[64], String:setByAuth[64];
+			GetClientName(client, setBy, sizeof(setBy));
+			GetClientAuthString(client, setByAuth, sizeof(setByAuth));
+
+			new Handle:existingTimer = INVALID_HANDLE;
+			if (punishmentRemovalTimers[adminMenuClientStatusTarget[client]] != INVALID_HANDLE) {
+				GetTrieValue(punishmentRemovalTimers[adminMenuClientStatusTarget[client]], pmethod[name], existingTimer);
+				if (existingTimer != INVALID_HANDLE) {
+					PrintToChat(client, "[SM] %s already has a punishment of type %s.", targetName, pmethod[name]);
+					return;
+				}
+			}
+
+			GetClientAuthString(adminMenuClientStatusTarget[client], targetAuth, sizeof(targetAuth));
+			GetClientIP(adminMenuClientStatusTarget[client], targetIP, sizeof(targetIP));
+
+			RecordPunishmentInDB(pmethod[name], setByAuth, setBy, targetAuth, targetName, targetIP, timestamp, adminMenuClientStatusDuration[client], reason);
+			Call_StartForward(pmethod[addCallback]);
+			Call_PushCell(adminMenuClientStatusTarget[client]);
+			Call_PushString(reason);
+			Call_Finish();
+
+			if (!(pmethod[flags] & SP_NOREMOVE) && !(pmethod[flags] & SP_NOTIME) && adminMenuClientStatusDuration[client] != 0) {
+				new Handle:punishmentInfoPack = CreateDataPack();
+				WritePackString(punishmentInfoPack, pmethod[name]);
+				WritePackCell(punishmentInfoPack, adminMenuClientStatusTarget[client]);
+				WritePackString(punishmentInfoPack, setBy);
+				WritePackCell(punishmentInfoPack, timestamp);
+				ResetPack(punishmentInfoPack); // Move index back to beginning so we can read from it.
+				new Handle:timer = CreateTimer(float(adminMenuClientStatusDuration[client] * 60), PunishmentExpire, punishmentInfoPack);
+				if (punishmentRemovalTimers[adminMenuClientStatusTarget[client]] == INVALID_HANDLE) {
+					punishmentRemovalTimers[adminMenuClientStatusTarget[client]] = CreateTrie();
+				}
+				SetTrieValue(punishmentRemovalTimers[adminMenuClientStatusTarget[client]], pmethod[name], timer);
+			}
+
+			PrintToChat(client, "[SM] Punish %s with %s for %i minutes because %s", targetName, pmethod[name], adminMenuClientStatusDuration[client], reason);
+		} else {
+			decl String:escapedType[64], String:adminName[64], String:adminAuth[64], String:escapedAdminName[64], String:escapedAdminAuth[64];
+			SQL_EscapeString(db, pmethod[name], escapedType, sizeof(escapedType));
+			GetClientName(client, adminName, sizeof(adminName));
+			SQL_EscapeString(db, adminName, escapedAdminName, sizeof(escapedAdminName));
+			GetClientAuthString(client, adminAuth, sizeof(adminAuth));
+			SQL_EscapeString(db, adminAuth, escapedAdminAuth, sizeof(escapedAdminAuth));
+
+			new Handle:existingTimer = INVALID_HANDLE;
+			if (punishmentRemovalTimers[adminMenuClientStatusTarget[client]] == INVALID_HANDLE) {
+				PrintToChat(client, "[SM] %s has no active punishments.", targetName);
+				return;
+			}
+			GetTrieValue(punishmentRemovalTimers[adminMenuClientStatusTarget[client]], pmethod[name], existingTimer);
+			if (existingTimer == INVALID_HANDLE) {
+				PrintToChat(client, "[SM] %s has not been punished with %s...", targetName, pmethod[name]);
+				return;
+			}
+
+			GetClientAuthString(adminMenuClientStatusTarget[client], targetAuth, sizeof(targetAuth));
+			GetClientIP(adminMenuClientStatusTarget[client], targetIP, sizeof(targetIP));
+
+			Call_StartForward(pmethod[removeCallback]);
+			Call_PushCell(adminMenuClientStatusTarget[client]);
+			Call_Finish();
+
+			decl String:query[512], String:escapedTargetAuth[64];
+			SQL_EscapeString(db, targetAuth, escapedTargetAuth, sizeof(escapedTargetAuth));
+			Format(query, sizeof(query), "UPDATE sourcepunish_punishments SET UnPunish = 1, UnPunish_Admin_Name = '%s', UnPunish_Admin_ID = '%s', UnPunish_Time = %i, UnPunish_Reason = '%s' WHERE UnPunish = 0 AND (Punish_Server_ID = %i || Punish_All_Servers = 1) AND Punish_Player_ID = '%s' AND Punish_Type = '%s' AND (Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW());", escapedAdminName, escapedAdminAuth, timestamp, reason, serverID, escapedTargetAuth, escapedType);
+
+			new Handle:punishmentRemovalInfoPack = CreateDataPack();
+			WritePackCell(punishmentRemovalInfoPack, client);
+			WritePackCell(punishmentRemovalInfoPack, adminMenuClientStatusTarget[client]);
+			WritePackString(punishmentRemovalInfoPack, pmethod[name]);
+			WritePackString(punishmentRemovalInfoPack, adminName);
+			WritePackString(punishmentRemovalInfoPack, targetName);
+			ResetPack(punishmentRemovalInfoPack); // Move index back to beginning so we can read from it.
+
+			SQL_TQuery(db, UnpunishedUser, query, punishmentRemovalInfoPack);
+
+			new Handle:timer = INVALID_HANDLE;
+			GetTrieValue(punishmentRemovalTimers[adminMenuClientStatusTarget[client]], pmethod[name], timer);
+			KillTimer(timer);
+			SetTrieValue(punishmentRemovalTimers[adminMenuClientStatusTarget[client]], pmethod[name], INVALID_HANDLE);
+		}
+	}
 }
