@@ -441,9 +441,9 @@ public UsersActivePunishmentsLookupComplete(Handle:owner, Handle:query, const St
 			new endTime = startTime + (SQL_FetchInt(query, 4) * 60);
 			new Handle:timer = CreateTimer(float(endTime - GetTime()), PunishmentExpire, punishmentInfoPack);
 			if (punishmentRemovalTimers[client] == INVALID_HANDLE) {
-				punishmentRemovalTimers[client] = CreateArray();
+				punishmentRemovalTimers[client] = CreateTrie();
 			}
-			PushArrayCell(punishmentRemovalTimers[client], timer);
+			SetTrieValue(punishmentRemovalTimers[client], type, timer);
 		}
 	}
 }
@@ -473,7 +473,7 @@ public Action:PunishmentExpire(Handle:timer, Handle:punishmentInfoPack) {
 	decl result;
 	Call_Finish(result);
 
-	RemoveFromArray(punishmentRemovalTimers[targetClient], FindValueInArray(punishmentRemovalTimers[targetClient], timer)); // This timer is done, no need to try to make it more dead later.
+	RemoveFromTrie(punishmentRemovalTimers[targetClient], type); // This timer is done, no need to try to make it more dead later.
 }
 
 public APLRes:AskPluginLoad2(Handle:myself, bool:late, String:error[], err_max) {
