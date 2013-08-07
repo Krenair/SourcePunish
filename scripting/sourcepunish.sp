@@ -15,7 +15,7 @@ public Plugin:myinfo = {
 	name = "SourcePunish",
 	author = "Alex, Azelphur and MonsterKiller",
 	description = "Punishment management system",
-	version = "0.05",
+	version = "0.06",
 	url = "https://github.com/Krenair/SourcePunish"
 }
 
@@ -237,8 +237,13 @@ public Action:Command_Punish(client, args) {
 	}
 
 	decl String:setBy[64], String:setByAuth[64];
-	GetClientName(client, setBy, sizeof(setBy));
-	GetClientAuthString(client, setByAuth, sizeof(setByAuth));
+	if (client) {
+		GetClientName(client, setBy, sizeof(setBy));
+		GetClientAuthString(client, setByAuth, sizeof(setByAuth));
+	} else {
+		strcopy(setBy, sizeof(setBy), "Console");
+		strcopy(setByAuth, sizeof(setByAuth), "Console");
+	}
 
 	for (new i = 0; i < target_count; i++) {
 		decl String:targetName[64], String:targetAuth[64], String:targetIP[64];
@@ -275,9 +280,9 @@ public Action:Command_Punish(client, args) {
 			}
 			SetTrieValue(punishmentRemovalTimers[target_list[i]], type, timer);
 		}
+		ReplyToCommand(client, "[SM] Punished %s with %s for %s minutes because %s", target, type, time, reason);
+		PrintToChat(target_list[i], "[SM] %s has punished you with %s for %s minutes with reason: %s", setBy, pmethod[name], time, reason);
 	}
-
-	ReplyToCommand(client, "[SM] Punish %s with %s for %s minutes because %s", target, type, time, reason);
 	return Plugin_Handled;
 }
 
@@ -371,57 +376,110 @@ public Action:Command_UnPunish(client, args) {
 		return Plugin_Handled;
 	}
 
-	decl String:escapedType[64], String:adminName[64], String:adminAuth[64], String:escapedAdminName[64], String:escapedAdminAuth[64];
+	decl String:escapedType[64], String:query[512];
 	SQL_EscapeString(db, type, escapedType, sizeof(escapedType));
-	GetClientName(client, adminName, sizeof(adminName));
-	SQL_EscapeString(db, adminName, escapedAdminName, sizeof(escapedAdminName));
-	GetClientAuthString(client, adminAuth, sizeof(adminAuth));
-	SQL_EscapeString(db, adminAuth, escapedAdminAuth, sizeof(escapedAdminAuth));
+	Format(query, sizeof(query), "SELECT Punish_Player_ID FROM sourcepunish_punishments WHERE UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND (Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) AND Punish_Type = '%s';", serverID, escapedType);
+	new Handle:commandInfoPack = CreateDataPack();
+	WritePackCell(commandInfoPack, client);
+	WritePackString(commandInfoPack, target);
+	WritePackString(commandInfoPack, type);
+	WritePackCell(commandInfoPack, timestamp);
+	WritePackString(commandInfoPack, reason);
+	WritePackCell(commandInfoPack, target_count);
+	// Can't send arrays through a DataPack... Put everything in an adt_array instead
+	new Handle:targetListADT = CreateArray();
+	for (new i = 0; i < target_count; i++) {
+		PushArrayCell(targetListADT, target_list[i]);
+	}
+	WritePackCell(commandInfoPack, _:targetListADT);
+	ResetPack(commandInfoPack);
+	SQL_TQuery(db, ProcessUnpunishCommand, query, commandInfoPack);
+	return Plugin_Handled;
+}
 
+public ProcessUnpunishCommand(Handle:owner, Handle:query, const String:error[], any:commandInfoPack) {
+	new client = ReadPackCell(commandInfoPack);
+	if (query == INVALID_HANDLE) {
+		PrintToServer("Error while checking existence of punishment for removal: %s", error);
+		PrintToChat(client, "DB error while checking existence of punishment for removal.");
+		return;
+	}
+	new Handle:authsWithPunishmentType = CreateArray(64);
+	while (SQL_FetchRow(query)) {
+		decl String:auth[64];
+		SQL_FetchString(query, 0, auth, sizeof(auth));
+		PushArrayString(authsWithPunishmentType, auth);
+	}
+
+	decl String:target[64], String:type[64], pmethod[punishmentType], String:reason[64];
+	ReadPackString(commandInfoPack, target, sizeof(target));
+	ReadPackString(commandInfoPack, type, sizeof(type));
+	GetTrieArray(punishments, type, pmethod, sizeof(pmethod));
+	new timestamp = ReadPackCell(commandInfoPack);
+	ReadPackString(commandInfoPack, reason, sizeof(reason));
+	new target_count = ReadPackCell(commandInfoPack);
+	new Handle:targetListADT = Handle:ReadPackCell(commandInfoPack);
+
+	decl String:escapedType[64], String:adminName[64], String:adminAuth[64], String:escapedAdminName[64], String:escapedAdminAuth[64];
+	SQL_EscapeString(db, pmethod[name], escapedType, sizeof(escapedType));
+	if (client) {
+		GetClientName(client, adminName, sizeof(adminName));
+		GetClientAuthString(client, adminAuth, sizeof(adminAuth));
+		SQL_EscapeString(db, adminName, escapedAdminName, sizeof(escapedAdminName));
+		SQL_EscapeString(db, adminAuth, escapedAdminAuth, sizeof(escapedAdminAuth));
+	} else {
+		strcopy(adminName, sizeof(adminName), "Console");
+		strcopy(adminAuth, sizeof(adminAuth), "Console");
+	}
 
 	for (new i = 0; i < target_count; i++) {
+		new targetClientID = GetArrayCell(targetListADT, i);
 		decl String:targetName[64], String:targetAuth[64], String:targetIP[64];
-		GetClientName(target_list[i], targetName, sizeof(targetName));
+		GetClientName(targetClientID, targetName, sizeof(targetName));
+		GetClientAuthString(targetClientID, targetAuth, sizeof(targetAuth));
+		GetClientIP(targetClientID, targetIP, sizeof(targetIP));
 
-		new Handle:existingTimer = INVALID_HANDLE;
-		if (punishmentRemovalTimers[target_list[i]] == INVALID_HANDLE) {
-			// TODO: This is wrong and won't work properly. Check DB instead.
-			ReplyToCommand(client, "[SM] %s has no active punishments.", targetName);
-			return Plugin_Handled;
+		new bool:found = false;
+		for (new j = 0; j < GetArraySize(authsWithPunishmentType); j++) {
+			decl String:checkAuth[64];
+			GetArrayString(authsWithPunishmentType, j, checkAuth, sizeof(checkAuth));
+			if (StrEqual(targetAuth, checkAuth)) {
+				found = true;
+				break;
+			}
 		}
-		GetTrieValue(punishmentRemovalTimers[target_list[i]], type, existingTimer);
-		if (existingTimer == INVALID_HANDLE) {
-			ReplyToCommand(client, "[SM] %s has not been punished with %s...", targetName, type);
-			return Plugin_Handled;
+		if (!found) {
+			if (client) {
+				PrintToChat(client, "[SM] %s has not been punished with %s...", targetName, pmethod[name]);
+			} else {
+				PrintToServer("[SM] %s has not been punished with %s...", targetName, pmethod[name]);
+			}
+			continue;
 		}
-
-		GetClientAuthString(target_list[i], targetAuth, sizeof(targetAuth));
-		GetClientIP(target_list[i], targetIP, sizeof(targetIP));
 
 		Call_StartForward(pmethod[removeCallback]);
-		Call_PushCell(target_list[i]);
+		Call_PushCell(targetClientID);
 		Call_Finish();
 
-		decl String:query[512], String:escapedTargetAuth[64];
+		decl String:updateQuery[512], String:escapedTargetAuth[64];
 		SQL_EscapeString(db, targetAuth, escapedTargetAuth, sizeof(escapedTargetAuth));
-		Format(query, sizeof(query), "UPDATE sourcepunish_punishments SET UnPunish = 1, UnPunish_Admin_Name = '%s', UnPunish_Admin_ID = '%s', UnPunish_Time = %i, UnPunish_Reason = '%s' WHERE UnPunish = 0 AND (Punish_Server_ID = %i || Punish_All_Servers = 1) AND Punish_Player_ID = '%s' AND Punish_Type = '%s' AND (Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW());", escapedAdminName, escapedAdminAuth, timestamp, reason, serverID, escapedTargetAuth, escapedType);
+		Format(updateQuery, sizeof(updateQuery), "UPDATE sourcepunish_punishments SET UnPunish = 1, UnPunish_Admin_Name = '%s', UnPunish_Admin_ID = '%s', UnPunish_Time = %i, UnPunish_Reason = '%s' WHERE UnPunish = 0 AND (Punish_Server_ID = %i || Punish_All_Servers = 1) AND Punish_Player_ID = '%s' AND Punish_Type = '%s' AND (Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW());", escapedAdminName, escapedAdminAuth, timestamp, reason, serverID, escapedTargetAuth, escapedType);
 
 		new Handle:punishmentRemovalInfoPack = CreateDataPack();
 		WritePackCell(punishmentRemovalInfoPack, client);
-		WritePackCell(punishmentRemovalInfoPack, target_list[i]);
-		WritePackString(punishmentRemovalInfoPack, type);
+		WritePackCell(punishmentRemovalInfoPack, targetClientID);
+		WritePackString(punishmentRemovalInfoPack, pmethod[name]);
 		WritePackString(punishmentRemovalInfoPack, adminName);
 		WritePackString(punishmentRemovalInfoPack, targetName);
 		ResetPack(punishmentRemovalInfoPack); // Move index back to beginning so we can read from it.
 
-		SQL_TQuery(db, UnpunishedUser, query, punishmentRemovalInfoPack);
+		SQL_TQuery(db, UnpunishedUser, updateQuery, punishmentRemovalInfoPack);
 
 		new Handle:timer = INVALID_HANDLE;
-		GetTrieValue(punishmentRemovalTimers[target_list[i]], type, timer);
+		GetTrieValue(punishmentRemovalTimers[targetClientID], pmethod[name], timer);
 		KillTimer(timer);
-		SetTrieValue(punishmentRemovalTimers[target_list[i]], type, INVALID_HANDLE);
+		SetTrieValue(punishmentRemovalTimers[targetClientID], pmethod[name], INVALID_HANDLE);
 	}
-	return Plugin_Handled;
 }
 
 public UnpunishedUser(Handle:owner, Handle:query, const String:error[], any:punishmentRemovalInfoPack) {
@@ -438,7 +496,11 @@ public UnpunishedUser(Handle:owner, Handle:query, const String:error[], any:puni
 		ReadPackString(punishmentRemovalInfoPack, adminName, sizeof(adminName));
 		ReadPackString(punishmentRemovalInfoPack, targetName, sizeof(targetName));
 
-		PrintToChat(adminClient, "[SM] Removed %s punishment from %s.", type, targetName);
+		if (adminClient) {
+			PrintToChat(adminClient, "[SM] Removed %s punishment from %s.", type, targetName);
+		} else {
+			PrintToServer("[SM] Removed %s punishment from %s.", type, targetName);
+		}
 		PrintToChat(targetClient, "[SM] Your %s punishment has been removed by %s.", type, adminName);
 	}
 }
@@ -884,7 +946,8 @@ public MenuHandler_Reason(Handle:menu, MenuAction:action, client, param) {
 				SetTrieValue(punishmentRemovalTimers[adminMenuClientStatusTarget[client]], pmethod[name], timer);
 			}
 
-			PrintToChat(client, "[SM] Punish %s with %s for %i minutes because %s", targetName, pmethod[name], adminMenuClientStatusDuration[client], reason);
+			PrintToChat(client, "[SM] Punished %s with %s for %i minutes because %s", targetName, pmethod[name], adminMenuClientStatusDuration[client], reason);
+			PrintToChat(adminMenuClientStatusTarget[client], "[SM] %s has punished you with %s for %i minutes with reason: %s", setBy, pmethod[name], adminMenuClientStatusDuration[client], reason);
 		} else {
 			decl String:escapedType[64], String:adminName[64], String:adminAuth[64], String:escapedAdminName[64], String:escapedAdminAuth[64];
 			SQL_EscapeString(db, pmethod[name], escapedType, sizeof(escapedType));
