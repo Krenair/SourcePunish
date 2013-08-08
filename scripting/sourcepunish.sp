@@ -813,7 +813,11 @@ public FoundPlayersWithActivePunishment(Handle:owner, Handle:query, const String
 			AddMenuItem(menu, targetUserId, display);
 		}
 	}
-	DisplayMenu(menu, client, MENU_TIME_FOREVER);
+	if (!GetMenuItemCount(menu)) {
+		PrintToChat(client, "[SP] There are no players with that punishment type");
+	} else {
+		DisplayMenu(menu, client, MENU_TIME_FOREVER);
+	}
 }
 
 public MenuHandler_Target(Handle:menu, MenuAction:action, client, param) {
