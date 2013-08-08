@@ -1,0 +1,4 @@
+SourcePunish is a punishment framework for SourceMod that is supposed to make it easy to implement different types of punishments that can be applied by the server to players in HL2-based games.
+SourcePunish is written by Alexander Monk, with the original ideas and a lot of help and input from Alfie Day (Azelphur), and some contributions by Rob Warner (MonsterKiller).
+This is a work in progress, and as such there will be lots of bugs. If you find any, please either open an issue on Github or speak to Alex on irc.azelphur.com #azelphur.
+Like all other SourceMod plugins, the license is GPLv2.

@@ -1,9 +1,27 @@
+/*
+ * Copyright (C) 2013 Alexander Monk, Alfie Day, Rob Warner.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ * http://www.gnu.org/copyleft/gpl.html
+ */
+
 //TODO: Internationalisation/localisation
 //TODO: Decide what to do with Punish_Auth_Type
 //TODO: Punish_All_Servers - need some way to set this without SQL access
 //TODO: Punish_All_Mods - SQL queries need to check this and needs to be changeable without SQL access
 //TODO: Determine how web panel is going to communicate with this plugin.
-//TODO: Add a README and licensing information
 
 #include <sourcemod>
 #include <sourcepunish>
