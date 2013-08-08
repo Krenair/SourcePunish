@@ -495,6 +495,7 @@ public ProcessUnpunishCommand(Handle:owner, Handle:query, const String:error[], 
 		WritePackString(punishmentRemovalInfoPack, pmethod[name]);
 		WritePackString(punishmentRemovalInfoPack, adminName);
 		WritePackString(punishmentRemovalInfoPack, targetName);
+		WritePackString(punishmentRemovalInfoPack, reason);
 		ResetPack(punishmentRemovalInfoPack); // Move index back to beginning so we can read from it.
 
 		SQL_TQuery(db, UnpunishedUser, updateQuery, punishmentRemovalInfoPack);
@@ -513,19 +514,20 @@ public UnpunishedUser(Handle:owner, Handle:query, const String:error[], any:puni
 		ThrowError("Error querying DB: %s", error);
 		PrintToChat(adminClient, "[SM] Error while unpunishing user.");
 	} else {
-		decl String:type[64], String:adminName[64], String:targetName[64];
+		decl String:type[64], String:adminName[64], String:targetName[64], String:reason[64];
 
 		new targetClient = ReadPackCell(punishmentRemovalInfoPack);
 		ReadPackString(punishmentRemovalInfoPack, type, sizeof(type));
 		ReadPackString(punishmentRemovalInfoPack, adminName, sizeof(adminName));
 		ReadPackString(punishmentRemovalInfoPack, targetName, sizeof(targetName));
+		ReadPackString(punishmentRemovalInfoPack, reason, sizeof(reason));
 
 		if (adminClient) {
-			PrintToChat(adminClient, "[SM] Removed %s punishment from %s.", type, targetName);
+			PrintToChat(adminClient, "[SM] Removed %s punishment from %s with reason: %s.", type, targetName, reason);
 		} else {
-			PrintToServer("[SM] Removed %s punishment from %s.", type, targetName);
+			PrintToServer("[SM] Removed %s punishment from %s with reason: %s.", type, targetName, reason);
 		}
-		PrintToChat(targetClient, "[SM] Your %s punishment has been removed by %s.", type, adminName);
+		PrintToChat(targetClient, "[SM] Your %s punishment has been removed by %s with reason: %s.", type, adminName, reason);
 	}
 }
 
@@ -981,6 +983,7 @@ ReasonSelected(client, String:reason[]) {
 		WritePackString(punishmentRemovalInfoPack, pmethod[name]);
 		WritePackString(punishmentRemovalInfoPack, adminName);
 		WritePackString(punishmentRemovalInfoPack, targetName);
+		WritePackString(punishmentRemovalInfoPack, reason);
 		ResetPack(punishmentRemovalInfoPack); // Move index back to beginning so we can read from it.
 
 		SQL_TQuery(db, UnpunishedUser, query, punishmentRemovalInfoPack);
