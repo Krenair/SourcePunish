@@ -17,6 +17,15 @@
  * http://www.gnu.org/copyleft/gpl.html
  */
 
+/*TODO: Fix error:
+ * sm_addgag STEAM_0:1:32597798
+L 08/08/2013 - 20:18:53: [SM] Plugin encountered error 15: Array index is out of bounds
+L 08/08/2013 - 20:18:53: [SM] Displaying call stack trace for plugin "sourcepunish.smx":
+L 08/08/2013 - 20:18:53: [SM]   [0]  Line 241, sourcepunish.sp::Command_Punish()
+*/
+//TODO: Punishment command needs to check DB to see if user has already been punished
+//TODO: Add ban plugin
+//TODO: SourceIRC support
 //TODO: Internationalisation/localisation
 //TODO: Decide what to do with Punish_Auth_Type
 //TODO: Punish_All_Servers - need some way to set this without SQL access
@@ -25,6 +34,7 @@
 
 #include <sourcemod>
 #include <sourcepunish>
+#include <regex>
 
 #undef REQUIRE_PLUGIN
 #include <adminmenu>
@@ -33,7 +43,7 @@ public Plugin:myinfo = {
 	name = "SourcePunish",
 	author = "Alex, Azelphur and MonsterKiller",
 	description = "Punishment management system",
-	version = "0.06",
+	version = "0.07",
 	url = "https://github.com/Krenair/SourcePunish"
 }
 
@@ -68,6 +78,7 @@ new configSection = 0;
 new Handle:defaultReasons = INVALID_HANDLE;
 new Handle:defaultTimes = INVALID_HANDLE;
 new Handle:defaultTimeKeys = INVALID_HANDLE;
+new Handle:steamIDRegex;
 
 public OnPluginStart() {
 	decl String:error[64];
@@ -98,6 +109,8 @@ public OnPluginStart() {
 	if (LibraryExists("adminmenu") && ((adminMenu = GetAdminTopMenu()) != INVALID_HANDLE)) {
 		OnAdminMenuReady(adminMenu);
 	}
+
+	steamIDRegex = CompileRegex("^STEAM_[0-7]:[01]:\\d+$");
 
 	punishments = CreateTrie();
 	punishmentTypes = CreateArray(64);
@@ -241,25 +254,6 @@ public Action:Command_Punish(client, args) {
 		reason[0] = '\0'; // Make it safe per http://wiki.alliedmods.net/Introduction_to_SourcePawn#Caveats
 	}
 
-	new String:target_name[MAX_TARGET_LENGTH]; // Stores the noun identifying the target(s)
-	new target_list[MAXPLAYERS], target_count; // Array to store the clients, and also a variable to store the number of clients
-	new bool:tn_is_ml; // Stores whether the noun must be translated
-
-	if ((target_count = ProcessTargetString(
-		target,
-		client,
-		target_list,
-		MAXPLAYERS,
-		COMMAND_FILTER_CONNECTED, // We want to allow targetting even players who are not fully in-game but connected
-		target_name,
-		sizeof(target_name),
-		tn_is_ml
-	)) <= 0) {
-		// Reply to the admin with a failure message
-		ReplyToTargetError(client, target_count);
-		return Plugin_Handled;
-	}
-
 	decl String:setBy[64], String:setByAuth[64];
 	if (client) {
 		GetClientName(client, setBy, sizeof(setBy));
@@ -269,43 +263,80 @@ public Action:Command_Punish(client, args) {
 		strcopy(setByAuth, sizeof(setByAuth), "Console");
 	}
 
-	for (new i = 0; i < target_count; i++) {
-		decl String:targetName[64], String:targetAuth[64], String:targetIP[64];
-		GetClientName(target_list[i], targetName, sizeof(targetName));
-
-		new Handle:existingTimer = INVALID_HANDLE;
-		if (punishmentRemovalTimers[target_list[i]] != INVALID_HANDLE) {
-			GetTrieValue(punishmentRemovalTimers[target_list[i]], type, existingTimer);
-			if (existingTimer != INVALID_HANDLE) {
-				ReplyToCommand(client, "[SM] %s already has a punishment of type %s.", targetName, type);
+	if (typeIndexInCommand == 6) {
+		// sm_add commands are for offline players
+		// TODO: Check DB to see if the user already has that punishment first
+		if (MatchRegex(steamIDRegex, target) >= 0) {
+			new String:tn[MAX_TARGET_LENGTH], tl[MAXPLAYERS], bool:tnml;
+			if (ProcessTargetString(target, client, tl, sizeof(tl), 0, tn, sizeof(tn), tnml)) {
+				PrintToChat(client, "[SM] Target is online as %s", tn);
 				return Plugin_Handled;
 			}
+			RecordPunishmentInDB(type, setByAuth, setBy, target, "", "", timestamp, StringToInt(time), reason);
+			ReplyToCommand(client, "[SM] Punished %s with %s for %s minutes because %s", target, type, time, reason);
+		} else {
+			PrintToChat(client, "[SM] Target should be a Steam ID!");
+		}
+		return Plugin_Handled;
+	} else {
+		new String:target_name[MAX_TARGET_LENGTH]; // Stores the noun identifying the target(s)
+		new target_list[MAXPLAYERS], target_count; // Array to store the clients, and also a variable to store the number of clients
+		new bool:tn_is_ml; // Stores whether the noun must be translated
+
+		if ((target_count = ProcessTargetString(
+			target,
+			client,
+			target_list,
+			MAXPLAYERS,
+			COMMAND_FILTER_CONNECTED, // We want to allow targetting even players who are not fully in-game but connected
+			target_name,
+			sizeof(target_name),
+			tn_is_ml
+		)) <= 0) {
+			// Reply to the admin with a failure message
+			ReplyToTargetError(client, target_count);
+			return Plugin_Handled;
 		}
 
-		GetClientAuthString(target_list[i], targetAuth, sizeof(targetAuth));
-		GetClientIP(target_list[i], targetIP, sizeof(targetIP));
+		for (new i = 0; i < target_count; i++) {
+			decl String:targetName[64], String:targetAuth[64], String:targetIP[64];
+			GetClientName(target_list[i], targetName, sizeof(targetName));
 
-		RecordPunishmentInDB(type, setByAuth, setBy, targetAuth, targetName, targetIP, timestamp, StringToInt(time), reason);
-		Call_StartForward(pmethod[addCallback]);
-		Call_PushCell(target_list[i]);
-		Call_PushString(reason);
-		Call_Finish();
-
-		if (!(pmethod[flags] & SP_NOREMOVE) && !(pmethod[flags] & SP_NOTIME) && !StrEqual(time, "0")) {
-			new Handle:punishmentInfoPack = CreateDataPack();
-			WritePackString(punishmentInfoPack, type);
-			WritePackCell(punishmentInfoPack, target_list[i]);
-			WritePackString(punishmentInfoPack, setBy);
-			WritePackCell(punishmentInfoPack, timestamp);
-			ResetPack(punishmentInfoPack); // Move index back to beginning so we can read from it.
-			new Handle:timer = CreateTimer(StringToFloat(time) * 60, PunishmentExpire, punishmentInfoPack);
-			if (punishmentRemovalTimers[target_list[i]] == INVALID_HANDLE) {
-				punishmentRemovalTimers[target_list[i]] = CreateTrie();
+			// TODO: This is wrong and won't work. Need to check DB instead
+			new Handle:existingTimer = INVALID_HANDLE;
+			if (punishmentRemovalTimers[target_list[i]] != INVALID_HANDLE) {
+				GetTrieValue(punishmentRemovalTimers[target_list[i]], type, existingTimer);
+				if (existingTimer != INVALID_HANDLE) {
+					ReplyToCommand(client, "[SM] %s already has a punishment of type %s.", targetName, type);
+					return Plugin_Handled;
+				}
 			}
-			SetTrieValue(punishmentRemovalTimers[target_list[i]], type, timer);
+
+			GetClientAuthString(target_list[i], targetAuth, sizeof(targetAuth));
+			GetClientIP(target_list[i], targetIP, sizeof(targetIP));
+
+			RecordPunishmentInDB(type, setByAuth, setBy, targetAuth, targetName, targetIP, timestamp, StringToInt(time), reason);
+			Call_StartForward(pmethod[addCallback]);
+			Call_PushCell(target_list[i]);
+			Call_PushString(reason);
+			Call_Finish();
+
+			if (!(pmethod[flags] & SP_NOREMOVE) && !(pmethod[flags] & SP_NOTIME) && !StrEqual(time, "0")) {
+				new Handle:punishmentInfoPack = CreateDataPack();
+				WritePackString(punishmentInfoPack, type);
+				WritePackCell(punishmentInfoPack, target_list[i]);
+				WritePackString(punishmentInfoPack, setBy);
+				WritePackCell(punishmentInfoPack, timestamp);
+				ResetPack(punishmentInfoPack); // Move index back to beginning so we can read from it.
+				new Handle:timer = CreateTimer(StringToFloat(time) * 60, PunishmentExpire, punishmentInfoPack);
+				if (punishmentRemovalTimers[target_list[i]] == INVALID_HANDLE) {
+					punishmentRemovalTimers[target_list[i]] = CreateTrie();
+				}
+				SetTrieValue(punishmentRemovalTimers[target_list[i]], type, timer);
+			}
+			ReplyToCommand(client, "[SM] Punished %s with %s for %s minutes because %s", target, type, time, reason);
+			PrintToChat(target_list[i], "[SM] %s has punished you with %s for %s minutes with reason: %s", setBy, pmethod[name], time, reason);
 		}
-		ReplyToCommand(client, "[SM] Punished %s with %s for %s minutes because %s", target, type, time, reason);
-		PrintToChat(target_list[i], "[SM] %s has punished you with %s for %s minutes with reason: %s", setBy, pmethod[name], time, reason);
 	}
 	return Plugin_Handled;
 }
@@ -382,10 +413,24 @@ public Action:Command_UnPunish(client, args) {
 	}
 
 	new String:target_name[MAX_TARGET_LENGTH]; // Stores the noun identifying the target(s)
-	new target_list[MAXPLAYERS], target_count; // Array to store the clients, and also a variable to store the number of clients
+	new target_list[MAXPLAYERS], target_count = 0; // Array to store the clients, and also a variable to store the number of clients
 	new bool:tn_is_ml; // Stores whether the noun must be translated
 
-	if ((target_count = ProcessTargetString(
+	if (typeIndexInCommand == 6) {
+		if (MatchRegex(steamIDRegex, target) == -1) {
+			PrintToChat(client, "[SM] Target should be a Steam ID!");
+			return Plugin_Handled;
+		} else {
+			new String:tn[MAX_TARGET_LENGTH], tl[MAXPLAYERS], bool:tnml;
+			if (ProcessTargetString(target, client, tl, sizeof(tl), 0, tn, sizeof(tn), tnml)) {
+				//decl String:targetName[64];
+				//GetClientName(tl[0], targetName, sizeof(targetName));
+				//PrintToChat(client, "[SM] Target is online as %s", targetName);
+				PrintToChat(client, "[SM] Target is online as %s", tn);
+				return Plugin_Handled;
+			}
+		}
+	} else if (typeIndexInCommand == 5 && (target_count = ProcessTargetString(
 		target,
 		client,
 		target_list,
@@ -402,7 +447,7 @@ public Action:Command_UnPunish(client, args) {
 
 	decl String:escapedType[64], String:query[512];
 	SQL_EscapeString(db, type, escapedType, sizeof(escapedType));
-	Format(query, sizeof(query), "SELECT Punish_Player_ID FROM sourcepunish_punishments WHERE UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND (Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) AND Punish_Type = '%s';", serverID, escapedType);
+	Format(query, sizeof(query), "SELECT Punish_Player_ID FROM sourcepunish_punishments WHERE UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) || Punish_Length = 0) AND Punish_Type = '%s';", serverID, escapedType);
 	new Handle:commandInfoPack = CreateDataPack();
 	WritePackCell(commandInfoPack, client);
 	WritePackString(commandInfoPack, target);
@@ -456,54 +501,87 @@ public ProcessUnpunishCommand(Handle:owner, Handle:query, const String:error[], 
 		strcopy(adminAuth, sizeof(adminAuth), "Console");
 	}
 
-	for (new i = 0; i < target_count; i++) {
-		new targetClientID = GetArrayCell(targetListADT, i);
-		decl String:targetName[64], String:targetAuth[64], String:targetIP[64];
-		GetClientName(targetClientID, targetName, sizeof(targetName));
-		GetClientAuthString(targetClientID, targetAuth, sizeof(targetAuth));
-		GetClientIP(targetClientID, targetIP, sizeof(targetIP));
+	if (target_count) {
+		for (new i = 0; i < target_count; i++) {
+			new targetClientID = GetArrayCell(targetListADT, i);
+			decl String:targetName[64], String:targetAuth[64], String:targetIP[64];
+			GetClientName(targetClientID, targetName, sizeof(targetName));
+			GetClientAuthString(targetClientID, targetAuth, sizeof(targetAuth));
+			GetClientIP(targetClientID, targetIP, sizeof(targetIP));
 
+			new bool:found = false;
+			for (new j = 0; j < GetArraySize(authsWithPunishmentType); j++) {
+				decl String:checkAuth[64];
+				GetArrayString(authsWithPunishmentType, j, checkAuth, sizeof(checkAuth));
+				if (StrEqual(targetAuth, checkAuth)) {
+					found = true;
+					break;
+				}
+			}
+			if (!found) {
+				if (client) {
+					PrintToChat(client, "[SM] %s has not been punished with %s...", targetName, pmethod[name]);
+				} else {
+					PrintToServer("[SM] %s has not been punished with %s...", targetName, pmethod[name]);
+				}
+				continue;
+			}
+
+			Call_StartForward(pmethod[removeCallback]);
+			Call_PushCell(targetClientID);
+			Call_Finish();
+
+			decl String:updateQuery[512], String:escapedTargetAuth[64];
+			SQL_EscapeString(db, targetAuth, escapedTargetAuth, sizeof(escapedTargetAuth));
+			Format(updateQuery, sizeof(updateQuery), "UPDATE sourcepunish_punishments SET UnPunish = 1, UnPunish_Admin_Name = '%s', UnPunish_Admin_ID = '%s', UnPunish_Time = %i, UnPunish_Reason = '%s' WHERE UnPunish = 0 AND (Punish_Server_ID = %i || Punish_All_Servers = 1) AND Punish_Player_ID = '%s' AND Punish_Type = '%s' AND (Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW());", escapedAdminName, escapedAdminAuth, timestamp, reason, serverID, escapedTargetAuth, escapedType);
+
+			new Handle:punishmentRemovalInfoPack = CreateDataPack();
+			WritePackCell(punishmentRemovalInfoPack, client);
+			WritePackCell(punishmentRemovalInfoPack, targetClientID);
+			WritePackString(punishmentRemovalInfoPack, pmethod[name]);
+			WritePackString(punishmentRemovalInfoPack, adminName);
+			WritePackString(punishmentRemovalInfoPack, targetName);
+			WritePackString(punishmentRemovalInfoPack, reason);
+			ResetPack(punishmentRemovalInfoPack); // Move index back to beginning so we can read from it.
+
+			SQL_TQuery(db, UnpunishedUser, updateQuery, punishmentRemovalInfoPack);
+
+			new Handle:timer = INVALID_HANDLE;
+			GetTrieValue(punishmentRemovalTimers[targetClientID], pmethod[name], timer);
+			KillTimer(timer);
+			SetTrieValue(punishmentRemovalTimers[targetClientID], pmethod[name], INVALID_HANDLE);
+		}
+	} else {
+		// sm_del, for offline players targetted by steam auth
 		new bool:found = false;
-		for (new j = 0; j < GetArraySize(authsWithPunishmentType); j++) {
+		for (new i = 0; i < GetArraySize(authsWithPunishmentType); i++) {
 			decl String:checkAuth[64];
-			GetArrayString(authsWithPunishmentType, j, checkAuth, sizeof(checkAuth));
-			if (StrEqual(targetAuth, checkAuth)) {
+			GetArrayString(authsWithPunishmentType, i, checkAuth, sizeof(checkAuth));
+			if (StrEqual(target, checkAuth)) {
 				found = true;
 				break;
 			}
 		}
 		if (!found) {
 			if (client) {
-				PrintToChat(client, "[SM] %s has not been punished with %s...", targetName, pmethod[name]);
+				PrintToChat(client, "[SM] %s has not been punished with %s...", target, pmethod[name]);
 			} else {
-				PrintToServer("[SM] %s has not been punished with %s...", targetName, pmethod[name]);
+				PrintToServer("[SM] %s has not been punished with %s...", target, pmethod[name]);
 			}
-			continue;
+			return;
 		}
-
-		Call_StartForward(pmethod[removeCallback]);
-		Call_PushCell(targetClientID);
-		Call_Finish();
-
 		decl String:updateQuery[512], String:escapedTargetAuth[64];
-		SQL_EscapeString(db, targetAuth, escapedTargetAuth, sizeof(escapedTargetAuth));
+		SQL_EscapeString(db, target, escapedTargetAuth, sizeof(escapedTargetAuth));
 		Format(updateQuery, sizeof(updateQuery), "UPDATE sourcepunish_punishments SET UnPunish = 1, UnPunish_Admin_Name = '%s', UnPunish_Admin_ID = '%s', UnPunish_Time = %i, UnPunish_Reason = '%s' WHERE UnPunish = 0 AND (Punish_Server_ID = %i || Punish_All_Servers = 1) AND Punish_Player_ID = '%s' AND Punish_Type = '%s' AND (Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW());", escapedAdminName, escapedAdminAuth, timestamp, reason, serverID, escapedTargetAuth, escapedType);
-
 		new Handle:punishmentRemovalInfoPack = CreateDataPack();
 		WritePackCell(punishmentRemovalInfoPack, client);
-		WritePackCell(punishmentRemovalInfoPack, targetClientID);
+		WritePackCell(punishmentRemovalInfoPack, 0); // No client ID for a logged out user
 		WritePackString(punishmentRemovalInfoPack, pmethod[name]);
 		WritePackString(punishmentRemovalInfoPack, adminName);
-		WritePackString(punishmentRemovalInfoPack, targetName);
+		WritePackString(punishmentRemovalInfoPack, target); // Just send the steam ID
 		WritePackString(punishmentRemovalInfoPack, reason);
 		ResetPack(punishmentRemovalInfoPack); // Move index back to beginning so we can read from it.
-
 		SQL_TQuery(db, UnpunishedUser, updateQuery, punishmentRemovalInfoPack);
-
-		new Handle:timer = INVALID_HANDLE;
-		GetTrieValue(punishmentRemovalTimers[targetClientID], pmethod[name], timer);
-		KillTimer(timer);
-		SetTrieValue(punishmentRemovalTimers[targetClientID], pmethod[name], INVALID_HANDLE);
 	}
 }
 
@@ -527,7 +605,10 @@ public UnpunishedUser(Handle:owner, Handle:query, const String:error[], any:puni
 		} else {
 			PrintToServer("[SM] Removed %s punishment from %s with reason: %s.", type, targetName, reason);
 		}
-		PrintToChat(targetClient, "[SM] Your %s punishment has been removed by %s with reason: %s.", type, adminName, reason);
+
+		if (targetClient) { // Will be 0/false if the user is not online
+			PrintToChat(targetClient, "[SM] Your %s punishment has been removed by %s with reason: %s.", type, adminName, reason);
+		}
 	}
 }
 
@@ -653,7 +734,9 @@ public Native_RegisterPunishment(Handle:plugin, numParams) {
 	decl String:mainAddCommand[67] = "sm_",
 		 String:mainRemoveCommand[69] = "sm_un",
 		 String:addCommandDescription[89] = "Punishes a player with a ",
-		 String:removeCommandDescription[103] = "Removes punishment from player of type ";
+		 String:removeCommandDescription[103] = "Removes punishment from player of type ",
+		 String:addOfflinePlayerCommandDescription[100] = "Punishes an offline Steam ID with a ",
+		 String:removeOfflinePlayerCommandDescription[113] = "Removes punishment from offline Steam ID of type ";
 	StrCat(mainAddCommand, sizeof(mainAddCommand), type);
 	StrCat(addCommandDescription, sizeof(addCommandDescription), typeDisplayName);
 	RegAdminCmd(mainAddCommand, Command_Punish, ADMFLAG_GENERIC, addCommandDescription);
@@ -662,14 +745,14 @@ public Native_RegisterPunishment(Handle:plugin, numParams) {
 	StrCat(removeCommandDescription, sizeof(removeCommandDescription), typeDisplayName);
 	RegAdminCmd(mainRemoveCommand, Command_UnPunish, ADMFLAG_GENERIC, removeCommandDescription);
 
-	if (!(pmethod[flags] & SP_NOTIME)) {
-		decl String:addCommand[70] = "sm_add", String:removeCommand[70] = "sm_del";
-		StrCat(addCommand, sizeof(addCommand), type);
-		RegAdminCmd(addCommand, Command_Punish, ADMFLAG_GENERIC, addCommandDescription);
+	decl String:addCommand[70] = "sm_add", String:removeCommand[70] = "sm_del";
+	StrCat(addCommand, sizeof(addCommand), type);
+	StrCat(addOfflinePlayerCommandDescription, sizeof(addOfflinePlayerCommandDescription), typeDisplayName);
+	RegAdminCmd(addCommand, Command_Punish, ADMFLAG_GENERIC, addOfflinePlayerCommandDescription);
 
-		StrCat(removeCommand, sizeof(removeCommand), type);
-		RegAdminCmd(removeCommand, Command_UnPunish, ADMFLAG_GENERIC, removeCommandDescription);
-	}
+	StrCat(removeCommand, sizeof(removeCommand), type);
+	StrCat(removeOfflinePlayerCommandDescription, sizeof(removeOfflinePlayerCommandDescription), typeDisplayName);
+	RegAdminCmd(removeCommand, Command_UnPunish, ADMFLAG_GENERIC, removeCommandDescription);
 
 	if (adminMenu == INVALID_HANDLE) {
 		new Handle:itemInfoPack = CreateDataPack();
