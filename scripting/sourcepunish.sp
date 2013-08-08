@@ -61,6 +61,8 @@ new bool:adminMenuClientStatusAdding[MAXPLAYERS + 1];
 new String:adminMenuClientStatusType[MAXPLAYERS + 1][64];
 new adminMenuClientStatusTarget[MAXPLAYERS + 1];
 new adminMenuClientStatusDuration[MAXPLAYERS + 1];
+new adminMenuClientStatusInDurationMenu[MAXPLAYERS + 1];
+new adminMenuClientStatusInReasonMenu[MAXPLAYERS + 1];
 new serverID;
 new configSection = 0;
 new Handle:defaultReasons = INVALID_HANDLE;
@@ -102,6 +104,10 @@ public OnPluginStart() {
 	adminMenuPunishmentItemsToAdd = CreateArray();
 	adminMenuPunishmentItems = CreateTrie();
 	LoadTranslations("common.phrases");
+
+	AddCommandListener(Command_Say, "say");
+	AddCommandListener(Command_Say, "say2");
+	AddCommandListener(Command_Say, "say_team");
 }
 
 public SMCResult:SMC_KeyValue(Handle:smc, const String:key[], const String:value[], bool:key_quotes, bool:value_quotes) {
@@ -835,12 +841,11 @@ public MenuHandler_Target(Handle:menu, MenuAction:action, client, param) {
 			decl String:title[100], String:typeForTitle[64], String:targetName[64];
 			GetDisplayTextForTypeAndAction(pmethod[displayName], adminMenuClientStatusAdding[client], typeForTitle, sizeof(typeForTitle));
 			GetClientName(target, targetName, sizeof(targetName));
-			Format(title, sizeof(title), "%s %s for:", typeForTitle, targetName);
 
 			if (adminMenuClientStatusAdding[client] && !(pmethod[flags] & SP_NOTIME)) {
 				// Open duration menu if we're adding AND the punishment type does not have the NOTIME bit set
+				Format(title, sizeof(title), "%s %s for: (alternatively type number of minutes in chat box)", typeForTitle, targetName);
 				new Handle:durationMenu = CreateMenu(MenuHandler_Duration);
-				// TODO: Intercept chat messages for durations
 				SetMenuTitle(durationMenu, title);
 				SetMenuExitBackButton(durationMenu, true);
 				for (new i = 0; i < GetArraySize(defaultTimeKeys); i++) {
@@ -850,17 +855,33 @@ public MenuHandler_Target(Handle:menu, MenuAction:action, client, param) {
 					AddMenuItem(durationMenu, key, value);
 				}
 				DisplayMenu(durationMenu, client, MENU_TIME_FOREVER);
+				adminMenuClientStatusInDurationMenu[client] = true;
 			} else {
 				// Otherwise, open the reason menu
+				Format(title, sizeof(title), "%s %s for: (alternatively type reason in chat box)", typeForTitle, targetName);
 				CreateReasonMenu(client, title);
 			}
 		}
 	}
 }
 
+DurationSelected(client, durationMinutes) {
+	adminMenuClientStatusDuration[client] = durationMinutes;
+	adminMenuClientStatusInDurationMenu[client] = false;
+
+	decl pmethod[punishmentType];
+	GetTrieArray(punishments, adminMenuClientStatusType[client], pmethod, sizeof(pmethod));
+
+	decl String:title[100], String:typeForTitle[64], String:targetName[64];
+	GetDisplayTextForTypeAndAction(pmethod[displayName], adminMenuClientStatusAdding[client], typeForTitle, sizeof(typeForTitle));
+	GetClientName(adminMenuClientStatusTarget[client], targetName, sizeof(targetName));
+	Format(title, sizeof(title), "%s %s for: (alternatively type reason in chat box)", typeForTitle, targetName);
+
+	CreateReasonMenu(client, title);
+}
+
 CreateReasonMenu(client, String:title[]) {
 	new Handle:reasonMenu = CreateMenu(MenuHandler_Reason);
-	// TODO: Intercept chat messages for reasons
 	SetMenuTitle(reasonMenu, title);
 	SetMenuExitBackButton(reasonMenu, true);
 
@@ -871,6 +892,104 @@ CreateReasonMenu(client, String:title[]) {
 		AddMenuItem(reasonMenu, key, defaultReason);
 	}
 	DisplayMenu(reasonMenu, client, MENU_TIME_FOREVER);
+	adminMenuClientStatusInReasonMenu[client] = true;
+}
+
+ReasonSelected(client, String:reason[]) {
+	new timestamp = GetTime();
+	adminMenuClientStatusInReasonMenu[client] = false;
+	decl pmethod[punishmentType];
+	GetTrieArray(punishments, adminMenuClientStatusType[client], pmethod, sizeof(pmethod));
+
+	if (!IsClientConnected(adminMenuClientStatusTarget[client])) {
+		PrintToChat(client, "[SM] Target is not connected.");
+		return;
+	}
+
+	decl String:targetName[64], String:targetAuth[64], String:targetIP[64];
+	GetClientName(adminMenuClientStatusTarget[client], targetName, sizeof(targetName));
+	if (!CanUserTarget(client, adminMenuClientStatusTarget[client])) {
+		PrintToChat(client, "[SM] Can't target %s.", targetName);
+		return;
+	}
+
+	if (adminMenuClientStatusAdding[client]) {
+		decl String:setBy[64], String:setByAuth[64];
+		GetClientName(client, setBy, sizeof(setBy));
+		GetClientAuthString(client, setByAuth, sizeof(setByAuth));
+
+		new Handle:existingTimer = INVALID_HANDLE;
+		if (punishmentRemovalTimers[adminMenuClientStatusTarget[client]] != INVALID_HANDLE) {
+			GetTrieValue(punishmentRemovalTimers[adminMenuClientStatusTarget[client]], pmethod[name], existingTimer);
+			if (existingTimer != INVALID_HANDLE) {
+				PrintToChat(client, "[SM] %s already has a punishment of type %s.", targetName, pmethod[name]);
+				return;
+			}
+		}
+
+		GetClientAuthString(adminMenuClientStatusTarget[client], targetAuth, sizeof(targetAuth));
+		GetClientIP(adminMenuClientStatusTarget[client], targetIP, sizeof(targetIP));
+
+		RecordPunishmentInDB(pmethod[name], setByAuth, setBy, targetAuth, targetName, targetIP, timestamp, adminMenuClientStatusDuration[client], reason);
+		Call_StartForward(pmethod[addCallback]);
+		Call_PushCell(adminMenuClientStatusTarget[client]);
+		Call_PushString(reason);
+		Call_Finish();
+
+		if (!(pmethod[flags] & SP_NOREMOVE) && !(pmethod[flags] & SP_NOTIME) && adminMenuClientStatusDuration[client] != 0) {
+			new Handle:punishmentInfoPack = CreateDataPack();
+			WritePackString(punishmentInfoPack, pmethod[name]);
+			WritePackCell(punishmentInfoPack, adminMenuClientStatusTarget[client]);
+			WritePackString(punishmentInfoPack, setBy);
+			WritePackCell(punishmentInfoPack, timestamp);
+			ResetPack(punishmentInfoPack); // Move index back to beginning so we can read from it.
+			new Handle:timer = CreateTimer(float(adminMenuClientStatusDuration[client] * 60), PunishmentExpire, punishmentInfoPack);
+			if (punishmentRemovalTimers[adminMenuClientStatusTarget[client]] == INVALID_HANDLE) {
+				punishmentRemovalTimers[adminMenuClientStatusTarget[client]] = CreateTrie();
+			}
+			SetTrieValue(punishmentRemovalTimers[adminMenuClientStatusTarget[client]], pmethod[name], timer);
+		}
+
+		PrintToChat(client, "[SM] Punished %s with %s for %i minutes because %s", targetName, pmethod[name], adminMenuClientStatusDuration[client], reason);
+		PrintToChat(adminMenuClientStatusTarget[client], "[SM] %s has punished you with %s for %i minutes with reason: %s", setBy, pmethod[name], adminMenuClientStatusDuration[client], reason);
+	} else {
+		decl String:escapedType[64], String:adminName[64], String:adminAuth[64], String:escapedAdminName[64], String:escapedAdminAuth[64];
+		SQL_EscapeString(db, pmethod[name], escapedType, sizeof(escapedType));
+		GetClientName(client, adminName, sizeof(adminName));
+		SQL_EscapeString(db, adminName, escapedAdminName, sizeof(escapedAdminName));
+		GetClientAuthString(client, adminAuth, sizeof(adminAuth));
+		SQL_EscapeString(db, adminAuth, escapedAdminAuth, sizeof(escapedAdminAuth));
+
+		GetClientAuthString(adminMenuClientStatusTarget[client], targetAuth, sizeof(targetAuth));
+		GetClientIP(adminMenuClientStatusTarget[client], targetIP, sizeof(targetIP));
+
+		Call_StartForward(pmethod[removeCallback]);
+		Call_PushCell(adminMenuClientStatusTarget[client]);
+		Call_Finish();
+
+		decl String:query[512], String:escapedTargetAuth[64];
+		SQL_EscapeString(db, targetAuth, escapedTargetAuth, sizeof(escapedTargetAuth));
+		Format(query, sizeof(query), "UPDATE sourcepunish_punishments SET UnPunish = 1, UnPunish_Admin_Name = '%s', UnPunish_Admin_ID = '%s', UnPunish_Time = %i, UnPunish_Reason = '%s' WHERE UnPunish = 0 AND (Punish_Server_ID = %i || Punish_All_Servers = 1) AND Punish_Player_ID = '%s' AND Punish_Type = '%s' AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) || Punish_Length = 0);", escapedAdminName, escapedAdminAuth, timestamp, reason, serverID, escapedTargetAuth, escapedType);
+
+		new Handle:punishmentRemovalInfoPack = CreateDataPack();
+		WritePackCell(punishmentRemovalInfoPack, client);
+		WritePackCell(punishmentRemovalInfoPack, adminMenuClientStatusTarget[client]);
+		WritePackString(punishmentRemovalInfoPack, pmethod[name]);
+		WritePackString(punishmentRemovalInfoPack, adminName);
+		WritePackString(punishmentRemovalInfoPack, targetName);
+		ResetPack(punishmentRemovalInfoPack); // Move index back to beginning so we can read from it.
+
+		SQL_TQuery(db, UnpunishedUser, query, punishmentRemovalInfoPack);
+
+		if (punishmentRemovalTimers[adminMenuClientStatusTarget[client]] != INVALID_HANDLE) {
+			new Handle:timer = INVALID_HANDLE;
+			GetTrieValue(punishmentRemovalTimers[adminMenuClientStatusTarget[client]], pmethod[name], timer);
+			if (timer != INVALID_HANDLE) {
+				KillTimer(timer);
+				SetTrieValue(punishmentRemovalTimers[adminMenuClientStatusTarget[client]], pmethod[name], INVALID_HANDLE);
+			}
+		}
+	}
 }
 
 public MenuHandler_Duration(Handle:menu, MenuAction:action, client, param) {
@@ -878,24 +997,14 @@ public MenuHandler_Duration(Handle:menu, MenuAction:action, client, param) {
 	if (action == MenuAction_End) {
 		CloseHandle(menu);
 	} else if (action == MenuAction_Cancel) {
+		adminMenuClientStatusInDurationMenu[client] = false;
 		if (param == MenuCancel_ExitBack && adminMenu != INVALID_HANDLE) {
 			DisplayTopMenu(adminMenu, client, TopMenuPosition_LastCategory);
 		}
 	} else if (action == MenuAction_Select) {
-		decl String:info[32];
-		GetMenuItem(menu, param, info, sizeof(info));
-		new durationMinutes = StringToInt(info);
-		adminMenuClientStatusDuration[client] = durationMinutes;
-
-		decl pmethod[punishmentType];
-		GetTrieArray(punishments, adminMenuClientStatusType[client], pmethod, sizeof(pmethod));
-
-		decl String:title[100], String:typeForTitle[64], String:targetName[64];
-		GetDisplayTextForTypeAndAction(pmethod[displayName], adminMenuClientStatusAdding[client], typeForTitle, sizeof(typeForTitle));
-		GetClientName(adminMenuClientStatusTarget[client], targetName, sizeof(targetName));
-		Format(title, sizeof(title), "%s %s for:", typeForTitle, targetName);
-
-		CreateReasonMenu(client, title);
+		decl String:durationMinutesStr[32];
+		GetMenuItem(menu, param, durationMinutesStr, sizeof(durationMinutesStr));
+		DurationSelected(client, StringToInt(durationMinutesStr));
 	}
 }
 
@@ -904,105 +1013,33 @@ public MenuHandler_Reason(Handle:menu, MenuAction:action, client, param) {
 	if (action == MenuAction_End) {
 		CloseHandle(menu);
 	} else if (action == MenuAction_Cancel) {
+		adminMenuClientStatusInReasonMenu[client] = false;
 		if (param == MenuCancel_ExitBack && adminMenu != INVALID_HANDLE) {
 			DisplayTopMenu(adminMenu, client, TopMenuPosition_LastCategory);
 		}
 	} else if (action == MenuAction_Select) {
-		new timestamp = GetTime();
 		decl String:reason[64];
 		GetArrayString(defaultReasons, param, reason, sizeof(reason));
-
-		decl pmethod[punishmentType];
-		GetTrieArray(punishments, adminMenuClientStatusType[client], pmethod, sizeof(pmethod));
-
-		if (!IsClientConnected(adminMenuClientStatusTarget[client])) {
-			PrintToChat(client, "[SM] Target is not connected.");
-			return;
-		}
-
-		decl String:targetName[64], String:targetAuth[64], String:targetIP[64];
-		GetClientName(adminMenuClientStatusTarget[client], targetName, sizeof(targetName));
-		if (!CanUserTarget(client, adminMenuClientStatusTarget[client])) {
-			PrintToChat(client, "[SM] Can't target %s.", targetName);
-			return;
-		}
-
-		if (adminMenuClientStatusAdding[client]) {
-			decl String:setBy[64], String:setByAuth[64];
-			GetClientName(client, setBy, sizeof(setBy));
-			GetClientAuthString(client, setByAuth, sizeof(setByAuth));
-
-			new Handle:existingTimer = INVALID_HANDLE;
-			if (punishmentRemovalTimers[adminMenuClientStatusTarget[client]] != INVALID_HANDLE) {
-				GetTrieValue(punishmentRemovalTimers[adminMenuClientStatusTarget[client]], pmethod[name], existingTimer);
-				if (existingTimer != INVALID_HANDLE) {
-					PrintToChat(client, "[SM] %s already has a punishment of type %s.", targetName, pmethod[name]);
-					return;
-				}
-			}
-
-			GetClientAuthString(adminMenuClientStatusTarget[client], targetAuth, sizeof(targetAuth));
-			GetClientIP(adminMenuClientStatusTarget[client], targetIP, sizeof(targetIP));
-
-			RecordPunishmentInDB(pmethod[name], setByAuth, setBy, targetAuth, targetName, targetIP, timestamp, adminMenuClientStatusDuration[client], reason);
-			Call_StartForward(pmethod[addCallback]);
-			Call_PushCell(adminMenuClientStatusTarget[client]);
-			Call_PushString(reason);
-			Call_Finish();
-
-			if (!(pmethod[flags] & SP_NOREMOVE) && !(pmethod[flags] & SP_NOTIME) && adminMenuClientStatusDuration[client] != 0) {
-				new Handle:punishmentInfoPack = CreateDataPack();
-				WritePackString(punishmentInfoPack, pmethod[name]);
-				WritePackCell(punishmentInfoPack, adminMenuClientStatusTarget[client]);
-				WritePackString(punishmentInfoPack, setBy);
-				WritePackCell(punishmentInfoPack, timestamp);
-				ResetPack(punishmentInfoPack); // Move index back to beginning so we can read from it.
-				new Handle:timer = CreateTimer(float(adminMenuClientStatusDuration[client] * 60), PunishmentExpire, punishmentInfoPack);
-				if (punishmentRemovalTimers[adminMenuClientStatusTarget[client]] == INVALID_HANDLE) {
-					punishmentRemovalTimers[adminMenuClientStatusTarget[client]] = CreateTrie();
-				}
-				SetTrieValue(punishmentRemovalTimers[adminMenuClientStatusTarget[client]], pmethod[name], timer);
-			}
-
-			PrintToChat(client, "[SM] Punished %s with %s for %i minutes because %s", targetName, pmethod[name], adminMenuClientStatusDuration[client], reason);
-			PrintToChat(adminMenuClientStatusTarget[client], "[SM] %s has punished you with %s for %i minutes with reason: %s", setBy, pmethod[name], adminMenuClientStatusDuration[client], reason);
-		} else {
-			decl String:escapedType[64], String:adminName[64], String:adminAuth[64], String:escapedAdminName[64], String:escapedAdminAuth[64];
-			SQL_EscapeString(db, pmethod[name], escapedType, sizeof(escapedType));
-			GetClientName(client, adminName, sizeof(adminName));
-			SQL_EscapeString(db, adminName, escapedAdminName, sizeof(escapedAdminName));
-			GetClientAuthString(client, adminAuth, sizeof(adminAuth));
-			SQL_EscapeString(db, adminAuth, escapedAdminAuth, sizeof(escapedAdminAuth));
-
-			GetClientAuthString(adminMenuClientStatusTarget[client], targetAuth, sizeof(targetAuth));
-			GetClientIP(adminMenuClientStatusTarget[client], targetIP, sizeof(targetIP));
-
-			Call_StartForward(pmethod[removeCallback]);
-			Call_PushCell(adminMenuClientStatusTarget[client]);
-			Call_Finish();
-
-			decl String:query[512], String:escapedTargetAuth[64];
-			SQL_EscapeString(db, targetAuth, escapedTargetAuth, sizeof(escapedTargetAuth));
-			Format(query, sizeof(query), "UPDATE sourcepunish_punishments SET UnPunish = 1, UnPunish_Admin_Name = '%s', UnPunish_Admin_ID = '%s', UnPunish_Time = %i, UnPunish_Reason = '%s' WHERE UnPunish = 0 AND (Punish_Server_ID = %i || Punish_All_Servers = 1) AND Punish_Player_ID = '%s' AND Punish_Type = '%s' AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) || Punish_Length = 0);", escapedAdminName, escapedAdminAuth, timestamp, reason, serverID, escapedTargetAuth, escapedType);
-
-			new Handle:punishmentRemovalInfoPack = CreateDataPack();
-			WritePackCell(punishmentRemovalInfoPack, client);
-			WritePackCell(punishmentRemovalInfoPack, adminMenuClientStatusTarget[client]);
-			WritePackString(punishmentRemovalInfoPack, pmethod[name]);
-			WritePackString(punishmentRemovalInfoPack, adminName);
-			WritePackString(punishmentRemovalInfoPack, targetName);
-			ResetPack(punishmentRemovalInfoPack); // Move index back to beginning so we can read from it.
-
-			SQL_TQuery(db, UnpunishedUser, query, punishmentRemovalInfoPack);
-
-			if (punishmentRemovalTimers[adminMenuClientStatusTarget[client]] != INVALID_HANDLE) {
-				new Handle:timer = INVALID_HANDLE;
-				GetTrieValue(punishmentRemovalTimers[adminMenuClientStatusTarget[client]], pmethod[name], timer);
-				if (timer != INVALID_HANDLE) {
-					KillTimer(timer);
-					SetTrieValue(punishmentRemovalTimers[adminMenuClientStatusTarget[client]], pmethod[name], INVALID_HANDLE);
-				}
-			}
-		}
+		ReasonSelected(client, reason);
 	}
+}
+
+public Action:Command_Say(client, const String:command[], argc) {
+	decl String:text[64];
+	GetCmdArg(1, text, sizeof(text));
+
+	if (adminMenuClientStatusInDurationMenu[client]) {
+		new durationMinutes = StringToInt(text);
+		if (durationMinutes) {
+			DurationSelected(client, durationMinutes);
+		} else {
+			PrintToChat(client, "That's not a valid number of minutes! (%s)", text);
+		}
+		return Plugin_Handled;
+	} else if (adminMenuClientStatusInReasonMenu[client]) {
+		CancelClientMenu(client, true);
+		ReasonSelected(client, text);
+		return Plugin_Handled;
+	}
+	return Plugin_Continue;
 }
