@@ -295,7 +295,7 @@ public Action:Command_Punish(client, args) {
 
 	decl String:escapedType[64], String:query[512];
 	SQL_EscapeString(db, type, escapedType, sizeof(escapedType));
-	Format(query, sizeof(query), "SELECT Punish_Player_ID FROM sourcepunish_punishments WHERE UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) || Punish_Length = 0) AND Punish_Type = '%s';", serverID, escapedType);
+	Format(query, sizeof(query), "SELECT Punish_Player_ID FROM sourcepunish_punishments WHERE UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0) AND Punish_Type = '%s';", serverID, escapedType);
 	new Handle:commandInfoPack = CreateDataPack();
 	WritePackCell(commandInfoPack, client);
 	WritePackString(commandInfoPack, target);
@@ -515,7 +515,7 @@ public Action:Command_UnPunish(client, args) {
 
 	decl String:escapedType[64], String:query[512];
 	SQL_EscapeString(db, type, escapedType, sizeof(escapedType));
-	Format(query, sizeof(query), "SELECT Punish_Player_ID FROM sourcepunish_punishments WHERE UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) || Punish_Length = 0) AND Punish_Type = '%s';", serverID, escapedType);
+	Format(query, sizeof(query), "SELECT Punish_Player_ID FROM sourcepunish_punishments WHERE UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0) AND Punish_Type = '%s';", serverID, escapedType);
 	new Handle:commandInfoPack = CreateDataPack();
 	WritePackCell(commandInfoPack, client);
 	WritePackString(commandInfoPack, target);
@@ -601,7 +601,7 @@ public ProcessUnpunishCommand(Handle:owner, Handle:query, const String:error[], 
 
 			decl String:updateQuery[512], String:escapedTargetAuth[64];
 			SQL_EscapeString(db, targetAuth, escapedTargetAuth, sizeof(escapedTargetAuth));
-			Format(updateQuery, sizeof(updateQuery), "UPDATE sourcepunish_punishments SET UnPunish = 1, UnPunish_Admin_Name = '%s', UnPunish_Admin_ID = '%s', UnPunish_Time = %i, UnPunish_Reason = '%s' WHERE UnPunish = 0 AND (Punish_Server_ID = %i || Punish_All_Servers = 1) AND Punish_Player_ID = '%s' AND Punish_Type = '%s' AND (Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW());", escapedAdminName, escapedAdminAuth, timestamp, reason, serverID, escapedTargetAuth, escapedType);
+			Format(updateQuery, sizeof(updateQuery), "UPDATE sourcepunish_punishments SET UnPunish = 1, UnPunish_Admin_Name = '%s', UnPunish_Admin_ID = '%s', UnPunish_Time = %i, UnPunish_Reason = '%s' WHERE UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND Punish_Player_ID = '%s' AND Punish_Type = '%s' AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Time = 0);", escapedAdminName, escapedAdminAuth, timestamp, reason, serverID, escapedTargetAuth, escapedType);
 
 			new Handle:punishmentRemovalInfoPack = CreateDataPack();
 			WritePackCell(punishmentRemovalInfoPack, client);
@@ -640,7 +640,7 @@ public ProcessUnpunishCommand(Handle:owner, Handle:query, const String:error[], 
 		}
 		decl String:updateQuery[512], String:escapedTargetAuth[64];
 		SQL_EscapeString(db, target, escapedTargetAuth, sizeof(escapedTargetAuth));
-		Format(updateQuery, sizeof(updateQuery), "UPDATE sourcepunish_punishments SET UnPunish = 1, UnPunish_Admin_Name = '%s', UnPunish_Admin_ID = '%s', UnPunish_Time = %i, UnPunish_Reason = '%s' WHERE UnPunish = 0 AND (Punish_Server_ID = %i || Punish_All_Servers = 1) AND Punish_Player_ID = '%s' AND Punish_Type = '%s' AND (Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW());", escapedAdminName, escapedAdminAuth, timestamp, reason, serverID, escapedTargetAuth, escapedType);
+		Format(updateQuery, sizeof(updateQuery), "UPDATE sourcepunish_punishments SET UnPunish = 1, UnPunish_Admin_Name = '%s', UnPunish_Admin_ID = '%s', UnPunish_Time = %i, UnPunish_Reason = '%s' WHERE UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND Punish_Player_ID = '%s' AND Punish_Type = '%s' AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0);", escapedAdminName, escapedAdminAuth, timestamp, reason, serverID, escapedTargetAuth, escapedType);
 		new Handle:punishmentRemovalInfoPack = CreateDataPack();
 		WritePackCell(punishmentRemovalInfoPack, client);
 		WritePackCell(punishmentRemovalInfoPack, 0); // No client ID for a logged out user
@@ -699,7 +699,7 @@ public OnClientDisconnect(client) {
 public OnClientAuthorized(client, const String:auth[]) {
 	decl String:escapedAuth[64], String:query[512];
 	SQL_EscapeString(db, auth, escapedAuth, sizeof(escapedAuth));
-	Format(query, sizeof(query), "SELECT Punish_Type, Punish_Admin_Name, Punish_Reason, Punish_Time, Punish_Length FROM sourcepunish_punishments WHERE Punish_Player_ID = '%s' AND UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND (Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW());", escapedAuth, serverID);
+	Format(query, sizeof(query), "SELECT Punish_Type, Punish_Admin_Name, Punish_Reason, Punish_Time, Punish_Length FROM sourcepunish_punishments WHERE Punish_Player_ID = '%s' AND UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0);", escapedAuth, serverID);
 	SQL_TQuery(db, UsersActivePunishmentsLookupComplete, query, client);
 }
 
@@ -834,7 +834,7 @@ public Native_RegisterPunishment(Handle:plugin, numParams) {
 	}
 
 	decl String:query[512];
-	Format(query, sizeof(query), "SELECT Punish_Type, Punish_Admin_Name, Punish_Player_ID, Punish_Reason, Punish_Time, Punish_Length FROM sourcepunish_punishments WHERE Punish_Type = '%s' AND UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND (Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW());", type, serverID);
+	Format(query, sizeof(query), "SELECT Punish_Type, Punish_Admin_Name, Punish_Player_ID, Punish_Reason, Punish_Time, Punish_Length FROM sourcepunish_punishments WHERE Punish_Type = '%s' AND UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Time = 0);", type, serverID);
 	SQL_TQuery(db, ActivePunishmentsLookupComplete, query);
 
 	return true;
@@ -932,7 +932,7 @@ AdminMenu_PunishmentProcessAction(TopMenuAction:action, client, String:buffer[],
 			WritePackCell(menuSelectDataPack, client);
 			WritePackCell(menuSelectDataPack, _:menu);
 			ResetPack(menuSelectDataPack);
-			Format(query, sizeof(query), "SELECT DISTINCT Punish_Player_ID FROM sourcepunish_punishments WHERE Punish_Type = '%s' AND UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) || Punish_Length = 0);", pmethod[name], serverID);
+			Format(query, sizeof(query), "SELECT DISTINCT Punish_Player_ID FROM sourcepunish_punishments WHERE Punish_Type = '%s' AND UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0);", pmethod[name], serverID);
 			SQL_TQuery(db, FoundPlayersWithActivePunishment, query, menuSelectDataPack);
 		}
 	}
@@ -1126,7 +1126,7 @@ ReasonSelected(client, String:reason[]) {
 
 		decl String:query[512], String:escapedTargetAuth[64];
 		SQL_EscapeString(db, targetAuth, escapedTargetAuth, sizeof(escapedTargetAuth));
-		Format(query, sizeof(query), "UPDATE sourcepunish_punishments SET UnPunish = 1, UnPunish_Admin_Name = '%s', UnPunish_Admin_ID = '%s', UnPunish_Time = %i, UnPunish_Reason = '%s' WHERE UnPunish = 0 AND (Punish_Server_ID = %i || Punish_All_Servers = 1) AND Punish_Player_ID = '%s' AND Punish_Type = '%s' AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) || Punish_Length = 0);", escapedAdminName, escapedAdminAuth, timestamp, reason, serverID, escapedTargetAuth, escapedType);
+		Format(query, sizeof(query), "UPDATE sourcepunish_punishments SET UnPunish = 1, UnPunish_Admin_Name = '%s', UnPunish_Admin_ID = '%s', UnPunish_Time = %i, UnPunish_Reason = '%s' WHERE UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND Punish_Player_ID = '%s' AND Punish_Type = '%s' AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0);", escapedAdminName, escapedAdminAuth, timestamp, reason, serverID, escapedTargetAuth, escapedType);
 
 		new Handle:punishmentRemovalInfoPack = CreateDataPack();
 		WritePackCell(punishmentRemovalInfoPack, client);
