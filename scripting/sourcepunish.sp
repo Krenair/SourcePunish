@@ -17,13 +17,6 @@
  * http://www.gnu.org/copyleft/gpl.html
  */
 
-/*TODO: Fix error:
- * sm_addgag STEAM_0:1:32597798
-L 08/08/2013 - 20:18:53: [SM] Plugin encountered error 15: Array index is out of bounds
-L 08/08/2013 - 20:18:53: [SM] Displaying call stack trace for plugin "sourcepunish.smx":
-L 08/08/2013 - 20:18:53: [SM]   [0]  Line 241, sourcepunish.sp::Command_Punish()
-*/
-//TODO: Punishment command needs to check DB to see if user has already been punished
 //TODO: Add ban plugin
 //TODO: SourceIRC support
 //TODO: Internationalisation/localisation
@@ -244,12 +237,18 @@ public Action:Command_Punish(client, args) {
 	}
 
 	if (args >= reasonArgumentNum) {
-		if (reasonArgumentNum == 3) {
-			pos = pos + BreakString(fullArgString[pos], time, sizeof(time));
+		new posAfterTime = -1;
+		if (reasonArgumentNum == 3 && pos != -1) {
+			posAfterTime = BreakString(fullArgString[pos], time, sizeof(time));
 		} else {
 			strcopy(time, sizeof(time), "0");
 		}
-		strcopy(reason, sizeof(reason), fullArgString[pos]);
+
+		if (posAfterTime != -1) {
+			strcopy(reason, sizeof(reason), fullArgString[pos + posAfterTime]);
+		} else {
+			reason[0] = '\0';
+		}
 	} else {
 		reason[0] = '\0'; // Make it safe per http://wiki.alliedmods.net/Introduction_to_SourcePawn#Caveats
 	}
@@ -475,9 +474,8 @@ public Action:Command_UnPunish(client, args) {
 	new pos = BreakString(fullArgString, target, sizeof(target));
 
 	decl String:reason[64];
-	new reasonArgumentNum = 2;
 
-	if (args >= reasonArgumentNum) {
+	if (pos != -1) {
 		strcopy(reason, sizeof(reason), fullArgString[pos]);
 	} else {
 		reason[0] = '\0'; // Make it safe per http://wiki.alliedmods.net/Introduction_to_SourcePawn#Caveats
