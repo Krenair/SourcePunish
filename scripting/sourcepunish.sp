@@ -250,6 +250,7 @@ public Action:Command_Punish(client, args) {
 			reason[0] = '\0';
 		}
 	} else {
+		strcopy(time, sizeof(time), "0");
 		reason[0] = '\0'; // Make it safe per http://wiki.alliedmods.net/Introduction_to_SourcePawn#Caveats
 	}
 
