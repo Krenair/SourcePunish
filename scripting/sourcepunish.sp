@@ -613,10 +613,12 @@ public ProcessUnpunishCommand(Handle:owner, Handle:query, const String:error[], 
 
 			SQL_TQuery(db, UnpunishedUser, updateQuery, punishmentRemovalInfoPack);
 
-			new Handle:timer = INVALID_HANDLE;
-			GetTrieValue(punishmentRemovalTimers[targetClientID], pmethod[name], timer);
-			KillTimer(timer);
-			SetTrieValue(punishmentRemovalTimers[targetClientID], pmethod[name], INVALID_HANDLE);
+			if (punishmentRemovalTimers[targetClientID] != INVALID_HANDLE) {
+				new Handle:timer = INVALID_HANDLE;
+				GetTrieValue(punishmentRemovalTimers[targetClientID], pmethod[name], timer);
+				KillTimer(timer);
+				SetTrieValue(punishmentRemovalTimers[targetClientID], pmethod[name], INVALID_HANDLE);
+			}
 		}
 	} else {
 		// sm_del, for offline players targetted by steam auth
