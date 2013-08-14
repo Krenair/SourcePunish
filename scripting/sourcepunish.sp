@@ -17,7 +17,7 @@
  * http://www.gnu.org/copyleft/gpl.html
  */
 
-//TODO: Add ban plugin
+//TODO: Test blockrename, blockspray, mute, silence plugins
 //TODO: SourceIRC support
 //TODO: Internationalisation/localisation
 //TODO: Decide what to do with Punish_Auth_Type
@@ -799,6 +799,8 @@ public Native_RegisterPunishment(Handle:plugin, numParams) {
 
 	decl String:mainAddCommand[67] = "sm_",
 		 String:mainRemoveCommand[69] = "sm_un",
+		 String:addCommand[70] = "sm_add",
+		 String:removeCommand[70] = "sm_del",
 		 String:addCommandDescription[89] = "Punishes a player with a ",
 		 String:removeCommandDescription[103] = "Removes punishment from player of type ",
 		 String:addOfflinePlayerCommandDescription[100] = "Punishes an offline Steam ID with a ",
@@ -807,11 +809,12 @@ public Native_RegisterPunishment(Handle:plugin, numParams) {
 	StrCat(addCommandDescription, sizeof(addCommandDescription), typeDisplayName);
 	RegAdminCmd(mainAddCommand, Command_Punish, ADMFLAG_GENERIC, addCommandDescription);
 
-	StrCat(mainRemoveCommand, sizeof(mainRemoveCommand), type);
-	StrCat(removeCommandDescription, sizeof(removeCommandDescription), typeDisplayName);
-	RegAdminCmd(mainRemoveCommand, Command_UnPunish, ADMFLAG_GENERIC, removeCommandDescription);
+	if (!(pmethod[flags] & SP_NOREMOVE)) {
+		StrCat(mainRemoveCommand, sizeof(mainRemoveCommand), type);
+		StrCat(removeCommandDescription, sizeof(removeCommandDescription), typeDisplayName);
+		RegAdminCmd(mainRemoveCommand, Command_UnPunish, ADMFLAG_GENERIC, removeCommandDescription);
+	}
 
-	decl String:addCommand[70] = "sm_add", String:removeCommand[70] = "sm_del";
 	StrCat(addCommand, sizeof(addCommand), type);
 	StrCat(addOfflinePlayerCommandDescription, sizeof(addOfflinePlayerCommandDescription), typeDisplayName);
 	RegAdminCmd(addCommand, Command_Punish, ADMFLAG_GENERIC, addOfflinePlayerCommandDescription);
