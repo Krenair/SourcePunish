@@ -277,7 +277,7 @@ public Action:Command_Punish(client, args) {
 			PrintToChat(client, "[SM] Target should be a Steam ID!");
 			return Plugin_Handled;
 		}
-	} else if (typeIndexInCommand == 5 && (target_count = ProcessTargetString(
+	} else if (typeIndexInCommand == 3 && (target_count = ProcessTargetString(
 		target,
 		client,
 		target_list,
