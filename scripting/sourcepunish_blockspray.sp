@@ -28,11 +28,9 @@ public RemovePunishment(client) {
 public Action:PlayerSpray(const String:te_name[], const clients[], client_count, Float:delay) {
 	new client = TE_ReadNum("m_nPlayer");
 
-	if (IsClientInGame(client)) {
-		if (!g_bSprayBanned[client]) {
-			PrintToChat(client, "You are banned from placing sprays on this server");
-			return Plugin_Handled;
-		}
+	if (IsClientInGame(client) && g_bSprayBanned[client]) {
+		PrintToChat(client, "You are banned from placing sprays on this server");
+		return Plugin_Handled;
 	}
 
 	return Plugin_Continue;
