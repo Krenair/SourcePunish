@@ -768,8 +768,7 @@ public Action:PunishmentExpire(Handle:timer, Handle:punishmentInfoPack) {
 
 	Call_StartForward(pmethod[removeCallback]);
 	Call_PushCell(targetClient);
-	decl result;
-	Call_Finish(result);
+	Call_Finish();
 
 	RemoveFromTrie(punishmentRemovalTimers[targetClient], type); // This timer is done, no need to try to make it more dead later.
 }
