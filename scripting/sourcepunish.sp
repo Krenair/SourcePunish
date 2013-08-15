@@ -17,8 +17,8 @@
  * http://www.gnu.org/copyleft/gpl.html
  */
 
-//TODO: Test blockrename, blockspray, mute, silence plugins
 //TODO: SourceIRC support
+//TODO: Fix blockrename plugin
 //TODO: Internationalisation/localisation
 //TODO: Decide what to do with Punish_Auth_Type
 //TODO: Punish_All_Servers - need some way to set this without SQL access
