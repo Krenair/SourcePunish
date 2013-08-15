@@ -116,7 +116,7 @@ public OnPluginStart() {
 	AddCommandListener(Command_Say, "say2");
 	AddCommandListener(Command_Say, "say_team");
 
-	punishmentRegisteredForward = CreateForward(ET_Ignore, Param_String);
+	punishmentRegisteredForward = CreateGlobalForward("PunishmentRegistered", ET_Ignore, Param_String);
 }
 
 public SMCResult:SMC_KeyValue(Handle:smc, const String:key[], const String:value[], bool:key_quotes, bool:value_quotes) {
@@ -778,14 +778,8 @@ public Action:PunishmentExpire(Handle:timer, Handle:punishmentInfoPack) {
 
 public APLRes:AskPluginLoad2(Handle:myself, bool:late, String:error[], err_max) {
 	CreateNative("RegisterPunishment", Native_RegisterPunishment);
-	CreateNative("AddToPunishmentRegisteredForward", Native_AddToPunishmentRegisteredForward);
 	CreateNative("GetRegisteredPunishments", Native_GetRegisteredPunishments);
 	return APLRes_Success;
-}
-
-public Native_AddToPunishmentRegisteredForward(Handle:plugin, numParams) {
-	AddToForward(punishmentRegisteredForward, plugin, GetNativeCell(1));
-	return true;
 }
 
 public Native_GetRegisteredPunishments(Handle:plugin, numParams) {

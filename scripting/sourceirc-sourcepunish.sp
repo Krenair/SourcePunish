@@ -11,7 +11,6 @@ public Plugin:myinfo = {
 };
 
 public OnPluginStart() {
-	AddToPunishmentRegisteredForward(PunishmentRegistered);
 	new Handle:registeredPunishments = GetRegisteredPunishments();
 	for (new i = 0; i < GetArraySize(registeredPunishments); i++) {
 		decl String:type[64];
