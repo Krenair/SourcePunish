@@ -794,7 +794,7 @@ public Native_RegisterPunishment(Handle:plugin, numParams) {
 	AddToForward(af, plugin, GetNativeCell(3));
 	pmethod[addCallback] = af;
 
-	new Handle:rf = CreateForward(ET_Event, Param_Cell, Param_String);
+	new Handle:rf = CreateForward(ET_Event, Param_Cell);
 	AddToForward(rf, plugin, GetNativeCell(4));
 	pmethod[removeCallback] = rf;
 
