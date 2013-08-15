@@ -717,6 +717,7 @@ public UsersActivePunishmentsLookupComplete(Handle:owner, Handle:query, const St
 		decl pmethod[punishmentType];
 		if (!GetTrieArray(punishments, type, pmethod, sizeof(pmethod))) {
 			PrintToServer("Loaded an active punishment with unknown type %s", type);
+			continue;
 		}
 
 		Call_StartForward(pmethod[addCallback]);
