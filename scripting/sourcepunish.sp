@@ -755,11 +755,14 @@ public Action:PunishmentExpire(Handle:timer, Handle:punishmentInfoPack) {
 	ReadPackString(punishmentInfoPack, setBy, sizeof(setBy));
 	new setTimestamp = ReadPackCell(punishmentInfoPack);
 
+	RemoveFromTrie(punishmentRemovalTimers[targetClient], type); // This timer is done, no need to try to make it more dead later.
+
 	decl pmethod[punishmentType];
 	if (!GetTrieArray(punishments, type, pmethod, sizeof(pmethod))) {
 		decl String:targetClientName[64];
 		GetClientName(targetClient, targetClientName, sizeof(targetClientName));
 		PrintToServer("[SM] Punishment type %s not found when trying to end expired punishment for %s", type, targetClientName);
+		return;
 	}
 
 	if (IsClientInGame(targetClient)) {
@@ -772,8 +775,6 @@ public Action:PunishmentExpire(Handle:timer, Handle:punishmentInfoPack) {
 	Call_StartForward(pmethod[removeCallback]);
 	Call_PushCell(targetClient);
 	Call_Finish();
-
-	RemoveFromTrie(punishmentRemovalTimers[targetClient], type); // This timer is done, no need to try to make it more dead later.
 }
 
 public APLRes:AskPluginLoad2(Handle:myself, bool:late, String:error[], err_max) {
@@ -1093,6 +1094,7 @@ ReasonSelected(client, String:reason[]) {
 		GetClientName(client, setBy, sizeof(setBy));
 		GetClientAuthString(client, setByAuth, sizeof(setByAuth));
 
+		// TODO: This is wrong and won't work properly. Instead, query the DB before adding the player to the menu (Or maybe we do need to query here as well, to avoid race conditions)
 		new Handle:existingTimer = INVALID_HANDLE;
 		if (punishmentRemovalTimers[adminMenuClientStatusTarget[client]] != INVALID_HANDLE) {
 			GetTrieValue(punishmentRemovalTimers[adminMenuClientStatusTarget[client]], pmethod[name], existingTimer);
