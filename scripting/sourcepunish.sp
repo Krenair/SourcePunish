@@ -321,9 +321,9 @@ public Action:Command_Punish(client, args) {
 public ProcessPunishCommand(Handle:owner, Handle:query, const String:error[], any:commandInfoPack) {
 	new client = ReadPackCell(commandInfoPack);
 	if (query == INVALID_HANDLE) {
-		PrintToServer("Error while checking existence of punishment for removal: %s", error);
+		PrintToServer("Error while checking existence of punishment for addition: %s", error);
 		if (client) {
-			PrintToChat(client, "DB error while checking existence of punishment for removal.");
+			PrintToChat(client, "DB error while checking existence of punishment for addition.");
 		}
 		return;
 	}
