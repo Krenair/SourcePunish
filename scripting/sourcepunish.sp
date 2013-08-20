@@ -598,7 +598,7 @@ public ProcessUnpunishCommand(Handle:owner, Handle:query, const String:error[], 
 
 			decl String:updateQuery[512], String:escapedTargetAuth[64];
 			SQL_EscapeString(db, targetAuth, escapedTargetAuth, sizeof(escapedTargetAuth));
-			Format(updateQuery, sizeof(updateQuery), "UPDATE sourcepunish_punishments SET UnPunish = 1, UnPunish_Admin_Name = '%s', UnPunish_Admin_ID = '%s', UnPunish_Time = %i, UnPunish_Reason = '%s' WHERE UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND Punish_Player_ID = '%s' AND Punish_Type = '%s' AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Time = 0);", escapedAdminName, escapedAdminAuth, timestamp, reason, serverID, escapedTargetAuth, escapedType);
+			Format(updateQuery, sizeof(updateQuery), "UPDATE sourcepunish_punishments SET UnPunish = 1, UnPunish_Admin_Name = '%s', UnPunish_Admin_ID = '%s', UnPunish_Time = %i, UnPunish_Reason = '%s' WHERE UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND Punish_Player_ID = '%s' AND Punish_Type = '%s' AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0);", escapedAdminName, escapedAdminAuth, timestamp, reason, serverID, escapedTargetAuth, escapedType);
 
 			new Handle:punishmentRemovalInfoPack = CreateDataPack();
 			WritePackCell(punishmentRemovalInfoPack, client);
@@ -848,7 +848,7 @@ public Native_RegisterPunishment(Handle:plugin, numParams) {
 	}
 
 	decl String:query[512];
-	Format(query, sizeof(query), "SELECT Punish_Type, Punish_Admin_Name, Punish_Player_ID, Punish_Reason, Punish_Time, Punish_Length FROM sourcepunish_punishments WHERE Punish_Type = '%s' AND UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Time = 0);", type, serverID);
+	Format(query, sizeof(query), "SELECT Punish_Type, Punish_Admin_Name, Punish_Player_ID, Punish_Reason, Punish_Time, Punish_Length FROM sourcepunish_punishments WHERE Punish_Type = '%s' AND UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0);", type, serverID);
 	SQL_TQuery(db, ActivePunishmentsLookupComplete, query);
 
 	return true;
