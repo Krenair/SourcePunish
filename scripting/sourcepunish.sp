@@ -48,11 +48,6 @@ enum punishmentType {
 	flags,
 }
 
-enum adminMenuStatus {
-	bool:adding,
-	String:punishmentTypeStr[64],
-}
-
 new Handle:punishments = INVALID_HANDLE;
 new Handle:punishmentTypes = INVALID_HANDLE;
 new Handle:punishmentRemovalTimers[MAXPLAYERS + 1];
