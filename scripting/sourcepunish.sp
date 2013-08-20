@@ -17,7 +17,8 @@
  * http://www.gnu.org/copyleft/gpl.html
  */
 
-//TODO: SourceIRC support
+//TODO: Make descriptions include command info - currently they just have the description text.
+//TODO: Refactor core to use the new internal_ functions
 //TODO: Fix blockrename plugin
 //TODO: Internationalisation/localisation
 //TODO: Decide what to do with Punish_Auth_Type
@@ -36,7 +37,7 @@ public Plugin:myinfo = {
 	name = "SourcePunish",
 	author = "Alex, Azelphur and MonsterKiller",
 	description = "Punishment management system",
-	version = "0.07",
+	version = "0.08",
 	url = "https://github.com/Krenair/SourcePunish"
 }
 
@@ -111,7 +112,7 @@ public OnPluginStart() {
 	AddCommandListener(Command_Say, "say2");
 	AddCommandListener(Command_Say, "say_team");
 
-	punishmentRegisteredForward = CreateGlobalForward("PunishmentRegistered", ET_Ignore, Param_String);
+	punishmentRegisteredForward = CreateGlobalForward("PunishmentRegistered", ET_Ignore, Param_String, Param_String, Param_Cell);
 }
 
 public SMCResult:SMC_KeyValue(Handle:smc, const String:key[], const String:value[], bool:key_quotes, bool:value_quotes) {
@@ -410,7 +411,7 @@ public ProcessPunishCommand(Handle:owner, Handle:query, const String:error[], an
 	}
 }
 
-public RecordPunishmentInDB(
+RecordPunishmentInDB(
 	String:type[],
 	String:punisherAuth[],
 	String:punisherName[],
@@ -419,7 +420,10 @@ public RecordPunishmentInDB(
 	String:punishedIP[],
 	startTime,
 	length,
-	String:reason[]
+	String:reason[],
+	Handle:plugin = INVALID_HANDLE,
+	Function:resultCallback = INVALID_FUNCTION,
+	targetClient = -1
 ) {
 	// Unfortunately you can't do threaded queries for prepared statements - this is https://bugs.alliedmods.net/show_bug.cgi?id=3519
 	decl String:unformattedQuery[300] = "INSERT INTO sourcepunish_punishments\
@@ -437,12 +441,53 @@ VALUES (%i, %i, \"%s\", \"%s\", \"%s\", \"%s\", %i, \"%s\", \"%s\", \"%s\");";
 	decl String:query[1024];
 	Format(query, sizeof(query), unformattedQuery, startTime, serverID, escapedPunishedName, escapedPunishedAuth, punishedIP, escapedType, length, escapedReason, escapedPunisherName, escapedPunisherAuth);
 
-	SQL_TQuery(db, PunishmentRecorded, query);
+	new Handle:resultCallbackDataPack = CreateDataPack();
+	WritePackCell(resultCallbackDataPack, _:plugin);
+	WritePackCell(resultCallbackDataPack, _:resultCallback);
+	WritePackCell(resultCallbackDataPack, targetClient);
+	WritePackString(resultCallbackDataPack, punishedAuth);
+	WritePackString(resultCallbackDataPack, punisherName);
+	WritePackString(resultCallbackDataPack, punisherAuth);
+	WritePackString(resultCallbackDataPack, type);
+	WritePackCell(resultCallbackDataPack, length);
+	WritePackString(resultCallbackDataPack, reason);
+	ResetPack(resultCallbackDataPack);
+	SQL_TQuery(db, PunishmentRecorded, query, resultCallbackDataPack);
 }
 
-public PunishmentRecorded(Handle:owner, Handle:hndl, const String:error[], any:data) {
+public PunishmentRecorded(Handle:owner, Handle:hndl, const String:error[], any:resultCallbackDataPack) {
+	decl String:punishedAuth[512], String:punisherName[512], String:punisherAuth[512], String:type[64], String:reason[512];
+
+	new Handle:plugin = Handle:ReadPackCell(resultCallbackDataPack);
+	new Function:resultCallback = Function:ReadPackCell(resultCallbackDataPack);
+	new targetClient = ReadPackCell(resultCallbackDataPack);
+	ReadPackString(resultCallbackDataPack, punishedAuth, sizeof(punishedAuth));
+	ReadPackString(resultCallbackDataPack, punisherName, sizeof(punisherName));
+	ReadPackString(resultCallbackDataPack, punisherAuth, sizeof(punisherAuth));
+	ReadPackString(resultCallbackDataPack, type, sizeof(type));
+	new durationMinutes = ReadPackCell(resultCallbackDataPack);
+	ReadPackString(resultCallbackDataPack, reason, sizeof(reason));
+
+	if (resultCallback != INVALID_FUNCTION) {
+		Call_StartFunction(plugin, resultCallback);
+		if (targetClient == -1) {
+			Call_PushString(punishedAuth);
+		} else {
+			Call_PushCell(targetClient);
+		}
+		if (hndl == INVALID_HANDLE) {
+			Call_PushCell(SP_ERROR_SQL);
+		} else {
+			Call_PushCell(SP_SUCCESS);
+		}
+		Call_PushString(punisherName);
+		Call_PushString(punisherAuth);
+		Call_Finish();
+	}
 	if (hndl == INVALID_HANDLE) {
 		ThrowError("Error while recording punishment: %s", error);
+	} else if (targetClient != -1) {
+		PrintToChat(targetClient, "[SM] You have been punished with %s by %s for %i minutes with reason: %s", type, punisherName, durationMinutes, reason);
 	}
 }
 
@@ -601,12 +646,16 @@ public ProcessUnpunishCommand(Handle:owner, Handle:query, const String:error[], 
 			Format(updateQuery, sizeof(updateQuery), "UPDATE sourcepunish_punishments SET UnPunish = 1, UnPunish_Admin_Name = '%s', UnPunish_Admin_ID = '%s', UnPunish_Time = %i, UnPunish_Reason = '%s' WHERE UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND Punish_Player_ID = '%s' AND Punish_Type = '%s' AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0);", escapedAdminName, escapedAdminAuth, timestamp, reason, serverID, escapedTargetAuth, escapedType);
 
 			new Handle:punishmentRemovalInfoPack = CreateDataPack();
-			WritePackCell(punishmentRemovalInfoPack, client);
 			WritePackCell(punishmentRemovalInfoPack, targetClientID);
+			WritePackCell(punishmentRemovalInfoPack, timestamp);
 			WritePackString(punishmentRemovalInfoPack, pmethod[name]);
 			WritePackString(punishmentRemovalInfoPack, adminName);
+			WritePackString(punishmentRemovalInfoPack, adminAuth);
 			WritePackString(punishmentRemovalInfoPack, targetName);
+			WritePackString(punishmentRemovalInfoPack, targetAuth);
 			WritePackString(punishmentRemovalInfoPack, reason);
+			WritePackCell(punishmentRemovalInfoPack, _:INVALID_HANDLE);
+			WritePackCell(punishmentRemovalInfoPack, _:INVALID_FUNCTION);
 			ResetPack(punishmentRemovalInfoPack); // Move index back to beginning so we can read from it.
 
 			SQL_TQuery(db, UnpunishedUser, updateQuery, punishmentRemovalInfoPack);
@@ -641,40 +690,67 @@ public ProcessUnpunishCommand(Handle:owner, Handle:query, const String:error[], 
 		SQL_EscapeString(db, target, escapedTargetAuth, sizeof(escapedTargetAuth));
 		Format(updateQuery, sizeof(updateQuery), "UPDATE sourcepunish_punishments SET UnPunish = 1, UnPunish_Admin_Name = '%s', UnPunish_Admin_ID = '%s', UnPunish_Time = %i, UnPunish_Reason = '%s' WHERE UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND Punish_Player_ID = '%s' AND Punish_Type = '%s' AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0);", escapedAdminName, escapedAdminAuth, timestamp, reason, serverID, escapedTargetAuth, escapedType);
 		new Handle:punishmentRemovalInfoPack = CreateDataPack();
-		WritePackCell(punishmentRemovalInfoPack, client);
-		WritePackCell(punishmentRemovalInfoPack, 0); // No client ID for a logged out user
+		WritePackCell(punishmentRemovalInfoPack, -1); // No client ID for a logged out user
+		WritePackCell(punishmentRemovalInfoPack, timestamp);
 		WritePackString(punishmentRemovalInfoPack, pmethod[name]);
 		WritePackString(punishmentRemovalInfoPack, adminName);
+		WritePackString(punishmentRemovalInfoPack, adminAuth);
 		WritePackString(punishmentRemovalInfoPack, target); // Just send the steam ID
 		WritePackString(punishmentRemovalInfoPack, reason);
+		WritePackCell(punishmentRemovalInfoPack, _:INVALID_HANDLE);
+		WritePackCell(punishmentRemovalInfoPack, _:INVALID_FUNCTION);
 		ResetPack(punishmentRemovalInfoPack); // Move index back to beginning so we can read from it.
 		SQL_TQuery(db, UnpunishedUser, updateQuery, punishmentRemovalInfoPack);
 	}
 }
 
 public UnpunishedUser(Handle:owner, Handle:query, const String:error[], any:punishmentRemovalInfoPack) {
-	new adminClient = ReadPackCell(punishmentRemovalInfoPack);
+	decl String:type[64], String:adminName[64], String:adminAuth[64], String:targetName[64], String:reason[64];
+	new targetClient = ReadPackCell(punishmentRemovalInfoPack);
+	ReadPackCell(punishmentRemovalInfoPack); // Timestamp
+	ReadPackString(punishmentRemovalInfoPack, type, sizeof(type));
+	ReadPackString(punishmentRemovalInfoPack, adminName, sizeof(adminName));
+	ReadPackString(punishmentRemovalInfoPack, adminAuth, sizeof(adminAuth));
+	ReadPackString(punishmentRemovalInfoPack, targetName, sizeof(targetName));
+	if (targetClient != -1) {
+		ReadPackString(punishmentRemovalInfoPack, "", 0); // Target auth
+	}
+	ReadPackString(punishmentRemovalInfoPack, reason, sizeof(reason));
+	new Handle:plugin = Handle:ReadPackCell(punishmentRemovalInfoPack);
+	new Function:resultCallback = Function:ReadPackCell(punishmentRemovalInfoPack);
 
 	if (query == INVALID_HANDLE) {
+		if (resultCallback != INVALID_FUNCTION) {
+			Call_StartFunction(plugin, resultCallback);
+			if (targetClient == -1) {
+				Call_PushString(targetName);
+			} else {
+				Call_PushCell(targetClient);
+			}
+			Call_PushCell(SP_ERROR_SQL);
+			Call_PushString(adminName);
+			Call_PushString(adminAuth);
+			Call_Finish();
+		}
 		ThrowError("Error querying DB: %s", error);
-		PrintToChat(adminClient, "[SM] Error while unpunishing user.");
 	} else {
-		decl String:type[64], String:adminName[64], String:targetName[64], String:reason[64];
+		PrintToServer("[SM] Removed %s punishment from %s with reason: %s.", type, targetName, reason);
 
-		new targetClient = ReadPackCell(punishmentRemovalInfoPack);
-		ReadPackString(punishmentRemovalInfoPack, type, sizeof(type));
-		ReadPackString(punishmentRemovalInfoPack, adminName, sizeof(adminName));
-		ReadPackString(punishmentRemovalInfoPack, targetName, sizeof(targetName));
-		ReadPackString(punishmentRemovalInfoPack, reason, sizeof(reason));
-
-		if (adminClient) {
-			PrintToChat(adminClient, "[SM] Removed %s punishment from %s with reason: %s.", type, targetName, reason);
-		} else {
-			PrintToServer("[SM] Removed %s punishment from %s with reason: %s.", type, targetName, reason);
+		if (targetClient > 0 && IsClientInGame(targetClient)) { // Will be 0/false or -1 if the user is not online
+			PrintToChat(targetClient, "[SM] Your %s punishment has been removed by %s with reason: %s.", type, adminName, reason);
 		}
 
-		if (targetClient) { // Will be 0/false if the user is not online
-			PrintToChat(targetClient, "[SM] Your %s punishment has been removed by %s with reason: %s.", type, adminName, reason);
+		if (resultCallback != INVALID_FUNCTION) {
+			Call_StartFunction(plugin, resultCallback);
+			if (targetClient == -1) {
+				Call_PushString(targetName);
+			} else {
+				Call_PushCell(targetClient);
+			}
+			Call_PushCell(SP_SUCCESS);
+			Call_PushString(adminName);
+			Call_PushString(adminAuth);
+			Call_Finish();
 		}
 	}
 }
@@ -774,12 +850,425 @@ public Action:PunishmentExpire(Handle:timer, Handle:punishmentInfoPack) {
 
 public APLRes:AskPluginLoad2(Handle:myself, bool:late, String:error[], err_max) {
 	CreateNative("RegisterPunishment", Native_RegisterPunishment);
-	CreateNative("GetRegisteredPunishments", Native_GetRegisteredPunishments);
+	CreateNative("GetRegisteredPunishmentTypeStrings", Native_GetRegisteredPunishmentTypeStrings);
+	CreateNative("GetPunishmentTypeDisplayName", Native_GetPunishmentTypeDisplayName);
+	CreateNative("GetPunishmentTypeFlags", Native_GetPunishmentTypeFlags);
+	CreateNative("PunishClient", Native_PunishClient);
+	CreateNative("PunishIdentity", Native_PunishIdentity);
+	CreateNative("UnpunishClient", Native_UnpunishClient);
+	CreateNative("UnpunishIdentity", Native_UnpunishIdentity);
 	return APLRes_Success;
 }
 
-public Native_GetRegisteredPunishments(Handle:plugin, numParams) {
+public Native_PunishClient(Handle:plugin, numParams) {
+	new timestamp = GetTime();
+
+	decl String:type[64], String:reason[256], String:setByName[64], String:setByAuth[64];
+	GetNativeString(1, type, sizeof(type));
+	new targetClient = GetNativeCell(2);
+	new durationMinutes = GetNativeCell(3);
+	GetNativeString(4, reason, sizeof(reason));
+	GetNativeString(5, setByName, sizeof(setByName));
+	GetNativeString(6, setByAuth, sizeof(setByAuth));
+	new Function:resultCallback = GetNativeCell(7);
+
+	decl pmethod[punishmentType];
+	if (!GetTrieArray(punishments, type, pmethod, sizeof(pmethod))) {
+		return ThrowNativeError(SP_ERROR_NATIVE, "Punishment type %s not found", type);
+	}
+
+	if (!IsClientConnected(targetClient)) {
+		return ThrowNativeError(SP_ERROR_NATIVE, "Target client %i is not connected", targetClient);
+	}
+
+	Internal_PunishClient(type, targetClient, durationMinutes, reason, setByName, setByAuth, timestamp, plugin, resultCallback);
+	return true;
+}
+
+public Internal_PunishClient(String:type[], targetClient, durationMinutes, String:reason[], String:setByName[], String:setByAuth[], timestamp, Handle:plugin, Function:resultCallback) {
+	new Handle:punishmentInfoPack = CreateDataPack();
+	WritePackString(punishmentInfoPack, type);
+	WritePackCell(punishmentInfoPack, targetClient);
+	WritePackCell(punishmentInfoPack, durationMinutes);
+	WritePackString(punishmentInfoPack, reason);
+	WritePackString(punishmentInfoPack, setByName);
+	WritePackString(punishmentInfoPack, setByAuth);
+	WritePackCell(punishmentInfoPack, timestamp);
+	WritePackCell(punishmentInfoPack, _:plugin);
+	WritePackCell(punishmentInfoPack, _:resultCallback);
+	ResetPack(punishmentInfoPack); // Move index back to beginning so we can read from it.
+
+	decl String:targetAuth[64];
+	GetClientAuthString(targetClient, targetAuth, sizeof(targetAuth));
+
+	decl pmethod[punishmentType], String:query[1000], String:escapedType[64], String:escapedTargetAuth[64];
+	GetTrieArray(punishments, type, pmethod, sizeof(pmethod));
+	SQL_EscapeString(db, targetAuth, escapedTargetAuth, sizeof(escapedTargetAuth));
+	SQL_EscapeString(db, pmethod[name], escapedType, sizeof(escapedType));
+	Format(query, sizeof(query), "SELECT COUNT(*) FROM sourcepunish_punishments WHERE UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0) AND Punish_Type = '%s' AND Punish_Player_ID = '%s';", serverID, escapedType, escapedTargetAuth);
+	SQL_TQuery(db, Internal_PunishClient_ExistenceCheckCompleted, query, punishmentInfoPack);
+}
+
+public Internal_PunishClient_ExistenceCheckCompleted(Handle:owner, Handle:query, const String:error[], any:punishmentInfoPack) {
+	decl String:type[64], String:reason[513], String:setByName[64], String:setByAuth[64];
+	ReadPackString(punishmentInfoPack, type, sizeof(type));
+	new targetClient = ReadPackCell(punishmentInfoPack);
+	new durationMinutes = ReadPackCell(punishmentInfoPack);
+	ReadPackString(punishmentInfoPack, reason, sizeof(reason));
+	ReadPackString(punishmentInfoPack, setByName, sizeof(setByName));
+	ReadPackString(punishmentInfoPack, setByAuth, sizeof(setByAuth));
+	new timestamp = ReadPackCell(punishmentInfoPack);
+	new Handle:plugin = Handle:ReadPackCell(punishmentInfoPack);
+	new Function:resultCallback = Function:ReadPackCell(punishmentInfoPack);
+
+	if (query == INVALID_HANDLE) {
+		Call_StartFunction(plugin, resultCallback);
+		Call_PushCell(targetClient);
+		Call_PushCell(SP_ERROR_SQL);
+		Call_PushString(setByName);
+		Call_PushString(setByAuth);
+		Call_Finish();
+		ThrowError("Error querying DB: %s", error);
+	}
+
+	SQL_FetchRow(query);
+	if (SQL_FetchInt(query, 0) != 0) {
+		Call_StartFunction(plugin, resultCallback);
+		Call_PushCell(targetClient);
+		Call_PushCell(SP_ERROR_TARGET_ALREADY_PUNISHED);
+		Call_PushString(setByName);
+		Call_PushString(setByAuth);
+		Call_Finish();
+		return;
+	}
+
+	decl pmethod[punishmentType];
+	GetTrieArray(punishments, type, pmethod, sizeof(pmethod));
+
+	decl String:targetName[64], String:targetAuth[64], String:targetIP[64];
+	GetClientName(targetClient, targetName, sizeof(targetName));
+	GetClientAuthString(targetClient, targetAuth, sizeof(targetAuth));
+	GetClientIP(targetClient, targetIP, sizeof(targetIP));
+
+	RecordPunishmentInDB(pmethod[name], setByAuth, setByName, targetAuth, targetName, targetIP, timestamp, durationMinutes, reason, plugin, resultCallback, targetClient);
+	Call_StartForward(pmethod[addCallback]);
+	Call_PushCell(targetClient);
+	Call_PushString(reason);
+	Call_Finish();
+
+	if (!(pmethod[flags] & SP_NOREMOVE) && !(pmethod[flags] & SP_NOTIME) && durationMinutes != 0) {
+		new Handle:punishmentExpiryInfoPack = CreateDataPack();
+		WritePackString(punishmentExpiryInfoPack, pmethod[name]);
+		WritePackCell(punishmentExpiryInfoPack, targetClient);
+		WritePackString(punishmentExpiryInfoPack, setByName);
+		WritePackCell(punishmentExpiryInfoPack, timestamp);
+		ResetPack(punishmentExpiryInfoPack); // Move index back to beginning so we can read from it.
+		new Handle:timer = CreateTimer(float(durationMinutes * 60), PunishmentExpire, punishmentExpiryInfoPack);
+		if (punishmentRemovalTimers[targetClient] == INVALID_HANDLE) {
+			punishmentRemovalTimers[targetClient] = CreateTrie();
+		}
+		SetTrieValue(punishmentRemovalTimers[targetClient], pmethod[name], timer);
+	}
+}
+
+public Native_PunishIdentity(Handle:plugin, numParams) {
+	new timestamp = GetTime();
+
+	decl String:type[64], String:identity[64], String:reason[256], String:setByName[64], String:setByAuth[64], pmethod[punishmentType];
+	GetNativeString(1, type, sizeof(type));
+	GetNativeString(2, identity, sizeof(identity));
+	new durationMinutes = GetNativeCell(3);
+	GetNativeString(4, reason, sizeof(reason));
+	GetNativeString(5, setByName, sizeof(setByName));
+	GetNativeString(6, setByAuth, sizeof(setByAuth));
+	new Function:resultCallback = GetNativeCell(7);
+
+	if (!GetTrieArray(punishments, type, pmethod, sizeof(pmethod))) {
+		return ThrowNativeError(SP_ERROR_NATIVE, "Punishment type %s not found", type);
+	}
+
+	Internal_PunishIdentity(type, identity, durationMinutes, reason, setByName, setByAuth, timestamp, plugin, resultCallback);
+
+	return true;
+}
+
+public Internal_PunishIdentity(String:type[], String:identity[], durationMinutes, String:reason[], String:setByName[], String:setByAuth[], timestamp, Handle:plugin, Function:resultCallback) {
+	new Handle:punishmentInfoPack = CreateDataPack();
+	WritePackString(punishmentInfoPack, type);
+	WritePackString(punishmentInfoPack, identity);
+	WritePackCell(punishmentInfoPack, durationMinutes);
+	WritePackString(punishmentInfoPack, reason);
+	WritePackString(punishmentInfoPack, setByName);
+	WritePackString(punishmentInfoPack, setByAuth);
+	WritePackCell(punishmentInfoPack, timestamp);
+	WritePackCell(punishmentInfoPack, _:plugin);
+	WritePackCell(punishmentInfoPack, _:resultCallback);
+	ResetPack(punishmentInfoPack); // Move index back to beginning so we can read from it.
+
+	decl pmethod[punishmentType], String:query[1000], String:escapedType[64], String:escapedTargetAuth[64];
+	GetTrieArray(punishments, type, pmethod, sizeof(pmethod));
+	SQL_EscapeString(db, identity, escapedTargetAuth, sizeof(escapedTargetAuth));
+	SQL_EscapeString(db, pmethod[name], escapedType, sizeof(escapedType));
+	Format(query, sizeof(query), "SELECT COUNT(*) FROM sourcepunish_punishments WHERE UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0) AND Punish_Type = '%s' AND Punish_Player_ID = '%s';", serverID, escapedType, escapedTargetAuth);
+	SQL_TQuery(db, Internal_PunishIdentity_ExistenceCheckCompleted, query, punishmentInfoPack);
+}
+
+public Internal_PunishIdentity_ExistenceCheckCompleted(Handle:owner, Handle:query, const String:error[], any:punishmentInfoPack) {
+	decl String:type[64], String:identity[64], String:adminName[64], String:adminAuth[64], String:reason[64];
+	ReadPackString(punishmentInfoPack, type, sizeof(type));
+	ReadPackString(punishmentInfoPack, identity, sizeof(identity));
+	new durationMinutes = ReadPackCell(punishmentInfoPack);
+	ReadPackString(punishmentInfoPack, reason, sizeof(reason));
+	ReadPackString(punishmentInfoPack, adminName, sizeof(adminName));
+	ReadPackString(punishmentInfoPack, adminAuth, sizeof(adminAuth));
+	new timestamp = ReadPackCell(punishmentInfoPack);
+	new Handle:plugin = Handle:ReadPackCell(punishmentInfoPack);
+	new Function:resultCallback = Function:ReadPackCell(punishmentInfoPack);
+
+	if (query == INVALID_HANDLE) {
+		Call_StartFunction(plugin, resultCallback);
+		Call_PushString(identity);
+		Call_PushCell(SP_ERROR_SQL);
+		Call_PushString(adminName);
+		Call_PushString(adminAuth);
+		Call_Finish();
+		ThrowError("Error querying DB: %s", error);
+	}
+
+	SQL_FetchRow(query);
+	if (SQL_FetchInt(query, 0) != 0) {
+		Call_StartFunction(plugin, resultCallback);
+		Call_PushString(identity);
+		Call_PushCell(SP_ERROR_TARGET_ALREADY_PUNISHED);
+		Call_PushString(adminName);
+		Call_PushString(adminAuth);
+		Call_Finish();
+		return;
+	}
+
+	RecordPunishmentInDB(type, adminAuth, adminName, identity, "", "", timestamp, durationMinutes, reason, plugin, resultCallback);
+}
+
+public Native_UnpunishClient(Handle:plugin, numParams) {
+	new timestamp = GetTime();
+
+	decl String:type[64], pmethod[punishmentType], String:reason[64], String:adminName[64], String:adminAuth[64];
+	GetNativeString(1, type, sizeof(type));
+	new targetClient = GetNativeCell(2);
+	GetNativeString(3, reason, sizeof(reason));
+	GetNativeString(4, adminName, sizeof(adminName));
+	GetNativeString(5, adminAuth, sizeof(adminAuth));
+	new Function:resultCallback = GetNativeCell(6);
+
+	if (!GetTrieArray(punishments, type, pmethod, sizeof(pmethod))) {
+		return ThrowNativeError(SP_ERROR_NATIVE, "Punishment type %s not found", type);
+	}
+
+	if (!IsClientConnected(targetClient)) {
+		return ThrowNativeError(SP_ERROR_NATIVE, "Target client %i is not connected", targetClient);
+	}
+
+	Internal_UnpunishClient(pmethod[name], adminName, adminAuth, targetClient, timestamp, reason, plugin, resultCallback);
+	return true;
+}
+
+public Internal_UnpunishClient(String:type[], String:adminName[], String:adminAuth[], targetClient, timestamp, String:reason[], Handle:plugin, Function:resultCallback) {
+	decl String:escapedType[64], String:escapedAdminName[64], String:escapedAdminAuth[64], pmethod[punishmentType];
+	GetTrieArray(punishments, type, pmethod, sizeof(pmethod));
+
+	decl String:targetName[64], String:targetAuth[64];
+	GetClientName(targetClient, targetName, sizeof(targetName));
+	GetClientAuthString(targetClient, targetAuth, sizeof(targetAuth));
+
+	new Handle:punishmentRemovalInfoPack = CreateDataPack();
+	WritePackCell(punishmentRemovalInfoPack, targetClient);
+	WritePackCell(punishmentRemovalInfoPack, timestamp);
+	WritePackString(punishmentRemovalInfoPack, pmethod[name]);
+	WritePackString(punishmentRemovalInfoPack, adminName);
+	WritePackString(punishmentRemovalInfoPack, adminAuth);
+	WritePackString(punishmentRemovalInfoPack, targetName);
+	WritePackString(punishmentRemovalInfoPack, targetAuth);
+	WritePackString(punishmentRemovalInfoPack, reason);
+	WritePackCell(punishmentRemovalInfoPack, _:plugin);
+	WritePackCell(punishmentRemovalInfoPack, _:resultCallback);
+	ResetPack(punishmentRemovalInfoPack); // Move index back to beginning so we can read from it.
+
+	decl String:query[1000], String:escapedTargetAuth[64];
+	SQL_EscapeString(db, targetAuth, escapedTargetAuth, sizeof(escapedTargetAuth));
+	SQL_EscapeString(db, pmethod[name], escapedType, sizeof(escapedType));
+	SQL_EscapeString(db, adminName, escapedAdminName, sizeof(escapedAdminName));
+	SQL_EscapeString(db, adminAuth, escapedAdminAuth, sizeof(escapedAdminAuth));
+	Format(query, sizeof(query), "SELECT COUNT(*) FROM sourcepunish_punishments WHERE UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0) AND Punish_Type = '%s' AND Punish_Player_ID = '%s';", serverID, escapedType, escapedTargetAuth);
+	SQL_TQuery(db, Internal_UnpunishClient_ExistenceCheckCompleted, query, punishmentRemovalInfoPack);
+}
+
+public Internal_UnpunishClient_ExistenceCheckCompleted(Handle:owner, Handle:query, const String:error[], any:punishmentRemovalInfoPack) {
+	decl String:type[64], pmethod[punishmentType], String:adminName[64], String:adminAuth[64], String:targetName[64], String:targetAuth[64], String:reason[64];
+	new targetClient = ReadPackCell(punishmentRemovalInfoPack);
+	new timestamp = ReadPackCell(punishmentRemovalInfoPack);
+	ReadPackString(punishmentRemovalInfoPack, type, sizeof(type));
+	ReadPackString(punishmentRemovalInfoPack, adminName, sizeof(adminName));
+	ReadPackString(punishmentRemovalInfoPack, adminAuth, sizeof(adminAuth));
+	ReadPackString(punishmentRemovalInfoPack, targetName, sizeof(targetName));
+	ReadPackString(punishmentRemovalInfoPack, targetAuth, sizeof(targetAuth));
+	ReadPackString(punishmentRemovalInfoPack, reason, sizeof(reason));
+	new Handle:plugin = Handle:ReadPackCell(punishmentRemovalInfoPack);
+	new Function:resultCallback = Function:ReadPackCell(punishmentRemovalInfoPack);
+	ResetPack(punishmentRemovalInfoPack);
+
+	if (query == INVALID_HANDLE) {
+		Call_StartFunction(plugin, resultCallback);
+		Call_PushCell(targetClient);
+		Call_PushCell(SP_ERROR_SQL);
+		Call_PushString(adminName);
+		Call_PushString(adminAuth);
+		Call_Finish();
+		ThrowError("Error querying DB: %s", error);
+	}
+
+	SQL_FetchRow(query);
+	new numberOfPunishmentsByUserWithType = SQL_FetchInt(query, 0);
+	if (numberOfPunishmentsByUserWithType == 0) {
+		Call_StartFunction(plugin, resultCallback);
+		Call_PushCell(targetClient);
+		Call_PushCell(SP_ERROR_TARGET_NOT_PUNISHED);
+		Call_PushString(adminName);
+		Call_PushString(adminAuth);
+		Call_Finish();
+		return;
+	}
+
+	GetTrieArray(punishments, type, pmethod, sizeof(pmethod));
+
+	Call_StartForward(pmethod[removeCallback]);
+	Call_PushCell(targetClient);
+	Call_Finish();
+
+	decl String:updateQuery[512], String:escapedType[64], String:escapedAdminName[64], String:escapedAdminAuth[64], String:escapedTargetAuth[64];
+	SQL_EscapeString(db, type, escapedType, sizeof(escapedType));
+	SQL_EscapeString(db, adminName, escapedAdminName, sizeof(escapedAdminName));
+	SQL_EscapeString(db, adminAuth, escapedAdminAuth, sizeof(escapedAdminAuth));
+	SQL_EscapeString(db, targetAuth, escapedTargetAuth, sizeof(escapedTargetAuth));
+	Format(updateQuery, sizeof(updateQuery), "UPDATE sourcepunish_punishments SET UnPunish = 1, UnPunish_Admin_Name = '%s', UnPunish_Admin_ID = '%s', UnPunish_Time = %i, UnPunish_Reason = '%s' WHERE UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND Punish_Player_ID = '%s' AND Punish_Type = '%s' AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0);", escapedAdminName, escapedAdminAuth, timestamp, reason, serverID, escapedTargetAuth, escapedType);
+
+	SQL_TQuery(db, UnpunishedUser, updateQuery, punishmentRemovalInfoPack);
+
+	if (punishmentRemovalTimers[targetClient] != INVALID_HANDLE) {
+		new Handle:timer = INVALID_HANDLE;
+		GetTrieValue(punishmentRemovalTimers[targetClient], pmethod[name], timer);
+		KillTimer(timer);
+		SetTrieValue(punishmentRemovalTimers[targetClient], pmethod[name], INVALID_HANDLE);
+	}
+}
+
+public Native_UnpunishIdentity(Handle:plugin, numParams) {
+	new timestamp = GetTime();
+
+	decl String:type[64], String:identity[64], String:reason[256], String:adminName[64], String:adminAuth[64], pmethod[punishmentType];
+	GetNativeString(1, type, sizeof(type));
+	GetNativeString(2, identity, sizeof(identity));
+	GetNativeString(3, reason, sizeof(reason));
+	GetNativeString(4, adminName, sizeof(adminName));
+	GetNativeString(5, adminAuth, sizeof(adminAuth));
+	new Function:resultCallback = GetNativeCell(6);
+
+	if (!GetTrieArray(punishments, type, pmethod, sizeof(pmethod))) {
+		return ThrowNativeError(SP_ERROR_NATIVE, "Punishment type %s not found", type);
+	}
+
+	Internal_UnpunishIdentity(pmethod[name], adminName, adminAuth, identity, timestamp, reason, plugin, resultCallback);
+	return true;
+}
+
+
+public Internal_UnpunishIdentity(String:type[], String:adminName[], String:adminAuth[], String:identity[], timestamp, String:reason[], Handle:plugin, Function:resultCallback) {
+	decl String:escapedType[64], String:escapedAdminName[64], String:escapedAdminAuth[64], pmethod[punishmentType];
+	GetTrieArray(punishments, type, pmethod, sizeof(pmethod));
+
+	new Handle:punishmentRemovalInfoPack = CreateDataPack();
+	WritePackCell(punishmentRemovalInfoPack, -1);
+	WritePackCell(punishmentRemovalInfoPack, timestamp);
+	WritePackString(punishmentRemovalInfoPack, pmethod[name]);
+	WritePackString(punishmentRemovalInfoPack, adminName);
+	WritePackString(punishmentRemovalInfoPack, adminAuth);
+	WritePackString(punishmentRemovalInfoPack, identity);
+	WritePackString(punishmentRemovalInfoPack, reason);
+	WritePackCell(punishmentRemovalInfoPack, _:plugin);
+	WritePackCell(punishmentRemovalInfoPack, _:resultCallback);
+	ResetPack(punishmentRemovalInfoPack); // Move index back to beginning so we can read from it.
+
+	decl String:query[1000], String:escapedTargetAuth[64];
+	SQL_EscapeString(db, identity, escapedTargetAuth, sizeof(escapedTargetAuth));
+	SQL_EscapeString(db, pmethod[name], escapedType, sizeof(escapedType));
+	SQL_EscapeString(db, adminName, escapedAdminName, sizeof(escapedAdminName));
+	SQL_EscapeString(db, adminAuth, escapedAdminAuth, sizeof(escapedAdminAuth));
+	Format(query, sizeof(query), "SELECT COUNT(*) FROM sourcepunish_punishments WHERE UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0) AND Punish_Type = '%s' AND Punish_Player_ID = '%s';", serverID, escapedType, escapedTargetAuth);
+	SQL_TQuery(db, Internal_UnpunishIdentity_ExistenceCheckCompleted, query, punishmentRemovalInfoPack);
+}
+
+public Internal_UnpunishIdentity_ExistenceCheckCompleted(Handle:owner, Handle:query, const String:error[], any:punishmentRemovalInfoPack) {
+	if (query == INVALID_HANDLE) {
+		ThrowError("Error querying DB: %s", error);
+	}
+
+	decl String:type[64], pmethod[punishmentType], String:adminName[64], String:adminAuth[64], String:targetAuth[64], String:reason[64];
+	ReadPackCell(punishmentRemovalInfoPack); // -1
+	new timestamp = ReadPackCell(punishmentRemovalInfoPack);
+	ReadPackString(punishmentRemovalInfoPack, type, sizeof(type));
+	ReadPackString(punishmentRemovalInfoPack, adminName, sizeof(adminName));
+	ReadPackString(punishmentRemovalInfoPack, adminAuth, sizeof(adminAuth));
+	ReadPackString(punishmentRemovalInfoPack, targetAuth, sizeof(targetAuth));
+	ReadPackString(punishmentRemovalInfoPack, reason, sizeof(reason));
+	new Handle:plugin = Handle:ReadPackCell(punishmentRemovalInfoPack);
+	new Function:resultCallback = Function:ReadPackCell(punishmentRemovalInfoPack);
+	ResetPack(punishmentRemovalInfoPack);
+
+	SQL_FetchRow(query);
+	if (SQL_FetchInt(query, 0) == 0) {
+		Call_StartFunction(plugin, resultCallback);
+		Call_PushString(targetAuth);
+		Call_PushCell(SP_ERROR_TARGET_NOT_PUNISHED);
+		Call_PushString(adminName);
+		Call_PushString(adminAuth);
+		Call_Finish();
+		return;
+	}
+
+	GetTrieArray(punishments, type, pmethod, sizeof(pmethod));
+
+	decl String:updateQuery[512], String:escapedType[64], String:escapedTargetAuth[64], String:escapedAdminName[64], String:escapedAdminAuth[64];
+	SQL_EscapeString(db, targetAuth, escapedTargetAuth, sizeof(escapedTargetAuth));
+	SQL_EscapeString(db, adminName, escapedAdminName, sizeof(escapedAdminName));
+	SQL_EscapeString(db, adminAuth, escapedAdminAuth, sizeof(escapedAdminAuth));
+	SQL_EscapeString(db, type, escapedType, sizeof(escapedType));
+
+	Format(updateQuery, sizeof(updateQuery), "UPDATE sourcepunish_punishments SET UnPunish = 1, UnPunish_Admin_Name = '%s', UnPunish_Admin_ID = '%s', UnPunish_Time = %i, UnPunish_Reason = '%s' WHERE UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND Punish_Player_ID = '%s' AND Punish_Type = '%s' AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0);", escapedAdminName, escapedAdminAuth, timestamp, reason, serverID, escapedTargetAuth, escapedType);
+	SQL_TQuery(db, UnpunishedUser, updateQuery, punishmentRemovalInfoPack);
+}
+
+public Native_GetRegisteredPunishmentTypeStrings(Handle:plugin, numParams) {
 	return _:punishmentTypes;
+}
+
+public Native_GetPunishmentTypeDisplayName(Handle:plugin, numParams) {
+	decl String:type[64], pmethod[punishmentType];
+	GetNativeString(1, type, sizeof(type));
+	if (!GetTrieArray(punishments, type, pmethod, sizeof(pmethod))) {
+		return ThrowNativeError(SP_ERROR_NATIVE, "Punishment type %s not found", type);
+	}
+
+	SetNativeString(2, pmethod[displayName], GetNativeCell(3)); // Copy display name into buffer (param 2). maxlen is param 3.
+	return true;
+}
+
+public Native_GetPunishmentTypeFlags(Handle:plugin, numParams) {
+	decl String:type[64], pmethod[punishmentType];
+	GetNativeString(1, type, sizeof(type));
+	if (!GetTrieArray(punishments, type, pmethod, sizeof(pmethod))) {
+		return ThrowNativeError(SP_ERROR_NATIVE, "Punishment type %s not found", type);
+	}
+
+	return pmethod[flags];
 }
 
 public Native_RegisterPunishment(Handle:plugin, numParams) {
@@ -834,6 +1323,8 @@ public Native_RegisterPunishment(Handle:plugin, numParams) {
 
 	Call_StartForward(punishmentRegisteredForward);
 	Call_PushString(type);
+	Call_PushString(typeDisplayName);
+	Call_PushCell(pmethod[flags]);
 	Call_Finish();
 
 	if (adminMenu == INVALID_HANDLE) {
@@ -1144,12 +1635,16 @@ ReasonSelected(client, String:reason[]) {
 		Format(query, sizeof(query), "UPDATE sourcepunish_punishments SET UnPunish = 1, UnPunish_Admin_Name = '%s', UnPunish_Admin_ID = '%s', UnPunish_Time = %i, UnPunish_Reason = '%s' WHERE UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND Punish_Player_ID = '%s' AND Punish_Type = '%s' AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0);", escapedAdminName, escapedAdminAuth, timestamp, reason, serverID, escapedTargetAuth, escapedType);
 
 		new Handle:punishmentRemovalInfoPack = CreateDataPack();
-		WritePackCell(punishmentRemovalInfoPack, client);
 		WritePackCell(punishmentRemovalInfoPack, adminMenuClientStatusTarget[client]);
+		WritePackCell(punishmentRemovalInfoPack, timestamp);
 		WritePackString(punishmentRemovalInfoPack, pmethod[name]);
 		WritePackString(punishmentRemovalInfoPack, adminName);
+		WritePackString(punishmentRemovalInfoPack, adminAuth);
 		WritePackString(punishmentRemovalInfoPack, targetName);
+		WritePackString(punishmentRemovalInfoPack, targetAuth);
 		WritePackString(punishmentRemovalInfoPack, reason);
+		WritePackCell(punishmentRemovalInfoPack, _:INVALID_HANDLE);
+		WritePackCell(punishmentRemovalInfoPack, _:INVALID_FUNCTION);
 		ResetPack(punishmentRemovalInfoPack); // Move index back to beginning so we can read from it.
 
 		SQL_TQuery(db, UnpunishedUser, query, punishmentRemovalInfoPack);
