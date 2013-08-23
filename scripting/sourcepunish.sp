@@ -17,7 +17,6 @@
  * http://www.gnu.org/copyleft/gpl.html
  */
 
-//TODO: Make descriptions include command info - currently they just have the description text.
 //TODO: Refactor core to use the new internal_ functions
 //TODO: Fix blockrename plugin
 //TODO: Internationalisation/localisation
@@ -1302,27 +1301,28 @@ public Native_RegisterPunishment(Handle:plugin, numParams) {
 		 String:mainRemoveCommand[69] = "sm_un",
 		 String:addCommand[70] = "sm_add",
 		 String:removeCommand[70] = "sm_del",
-		 String:addCommandDescription[89] = "Punishes a player with a ",
-		 String:removeCommandDescription[103] = "Removes punishment from player of type ",
-		 String:addOfflinePlayerCommandDescription[100] = "Punishes an offline Steam ID with a ",
-		 String:removeOfflinePlayerCommandDescription[113] = "Removes punishment from offline Steam ID of type ";
+		 String:addCommandDescription[128],
+		 String:removeCommandDescription[128],
+		 String:addOfflinePlayerCommandDescription[128],
+		 String:removeOfflinePlayerCommandDescription[128];
+
 	StrCat(mainAddCommand, sizeof(mainAddCommand), type);
-	StrCat(addCommandDescription, sizeof(addCommandDescription), typeDisplayName);
+	Format(addCommandDescription, sizeof(addCommandDescription), "%s <#userid|name> [expiry|0] [reason] - Punishes a player with a %s", mainAddCommand, typeDisplayName);
 	RegAdminCmd(mainAddCommand, Command_Punish, ADMFLAG_GENERIC, addCommandDescription);
 
 	if (!(pmethod[flags] & SP_NOREMOVE)) {
 		StrCat(mainRemoveCommand, sizeof(mainRemoveCommand), type);
-		StrCat(removeCommandDescription, sizeof(removeCommandDescription), typeDisplayName);
+		Format(removeCommandDescription, sizeof(removeCommandDescription), "%s <#userid|name> [reason] - Removes punishment from player of type %s", mainRemoveCommand, typeDisplayName);
 		RegAdminCmd(mainRemoveCommand, Command_UnPunish, ADMFLAG_GENERIC, removeCommandDescription);
 	}
 
 	StrCat(addCommand, sizeof(addCommand), type);
-	StrCat(addOfflinePlayerCommandDescription, sizeof(addOfflinePlayerCommandDescription), typeDisplayName);
+	Format(addOfflinePlayerCommandDescription, sizeof(addOfflinePlayerCommandDescription), "%s <steam ID> [expiry|0] [reason] - Punishes an offline Steam ID with a %s", addCommand, typeDisplayName);
 	RegAdminCmd(addCommand, Command_Punish, ADMFLAG_GENERIC, addOfflinePlayerCommandDescription);
 
 	StrCat(removeCommand, sizeof(removeCommand), type);
-	StrCat(removeOfflinePlayerCommandDescription, sizeof(removeOfflinePlayerCommandDescription), typeDisplayName);
-	RegAdminCmd(removeCommand, Command_UnPunish, ADMFLAG_GENERIC, removeCommandDescription);
+	Format(removeOfflinePlayerCommandDescription, sizeof(removeOfflinePlayerCommandDescription), "%s <steam ID> [reason] - Removes punishment from offline Steam ID of type %s", removeCommand, typeDisplayName);
+	RegAdminCmd(removeCommand, Command_UnPunish, ADMFLAG_GENERIC, removeOfflinePlayerCommandDescription);
 
 	Call_StartForward(punishmentRegisteredForward);
 	Call_PushString(type);
