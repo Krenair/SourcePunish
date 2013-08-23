@@ -801,7 +801,8 @@ public UsersActivePunishmentsLookupComplete(Handle:owner, Handle:query, const St
 		Call_PushString(reason);
 		Call_Finish();
 
-		if (!(pmethod[flags] & SP_NOREMOVE) && !(pmethod[flags] & SP_NOTIME)) {
+		new length = SQL_FetchInt(query, 4);
+		if (length > 0 && !(pmethod[flags] & SP_NOREMOVE) && !(pmethod[flags] & SP_NOTIME)) {
 			SQL_FetchString(query, 1, punisherName, sizeof(punisherName));
 			new startTime = SQL_FetchInt(query, 3);
 			new Handle:punishmentInfoPack = CreateDataPack();
@@ -810,7 +811,7 @@ public UsersActivePunishmentsLookupComplete(Handle:owner, Handle:query, const St
 			WritePackString(punishmentInfoPack, punisherName);
 			WritePackCell(punishmentInfoPack, startTime);
 			ResetPack(punishmentInfoPack); // Move index back to beginning so we can read from it.
-			new endTime = startTime + (SQL_FetchInt(query, 4) * 60);
+			new endTime = startTime + (length * 60);
 			new Handle:timer = CreateTimer(float(endTime - GetTime()), PunishmentExpire, punishmentInfoPack);
 			if (punishmentRemovalTimers[client] == INVALID_HANDLE) {
 				punishmentRemovalTimers[client] = CreateTrie();
