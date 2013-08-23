@@ -887,7 +887,7 @@ public Native_PunishClient(Handle:plugin, numParams) {
 	return true;
 }
 
-public Internal_PunishClient(String:type[], targetClient, durationMinutes, String:reason[], String:setByName[], String:setByAuth[], timestamp, Handle:plugin, Function:resultCallback) {
+Internal_PunishClient(String:type[], targetClient, durationMinutes, String:reason[], String:setByName[], String:setByAuth[], timestamp, Handle:plugin, Function:resultCallback) {
 	new Handle:punishmentInfoPack = CreateDataPack();
 	WritePackString(punishmentInfoPack, type);
 	WritePackCell(punishmentInfoPack, targetClient);
@@ -994,7 +994,7 @@ public Native_PunishIdentity(Handle:plugin, numParams) {
 	return true;
 }
 
-public Internal_PunishIdentity(String:type[], String:identity[], durationMinutes, String:reason[], String:setByName[], String:setByAuth[], timestamp, Handle:plugin, Function:resultCallback) {
+Internal_PunishIdentity(String:type[], String:identity[], durationMinutes, String:reason[], String:setByName[], String:setByAuth[], timestamp, Handle:plugin, Function:resultCallback) {
 	new Handle:punishmentInfoPack = CreateDataPack();
 	WritePackString(punishmentInfoPack, type);
 	WritePackString(punishmentInfoPack, identity);
@@ -1074,7 +1074,7 @@ public Native_UnpunishClient(Handle:plugin, numParams) {
 	return true;
 }
 
-public Internal_UnpunishClient(String:type[], String:adminName[], String:adminAuth[], targetClient, timestamp, String:reason[], Handle:plugin, Function:resultCallback) {
+Internal_UnpunishClient(String:type[], String:adminName[], String:adminAuth[], targetClient, timestamp, String:reason[], Handle:plugin, Function:resultCallback) {
 	decl String:escapedType[64], String:escapedAdminName[64], String:escapedAdminAuth[64], pmethod[punishmentType];
 	GetTrieArray(punishments, type, pmethod, sizeof(pmethod));
 
@@ -1183,7 +1183,7 @@ public Native_UnpunishIdentity(Handle:plugin, numParams) {
 }
 
 
-public Internal_UnpunishIdentity(String:type[], String:adminName[], String:adminAuth[], String:identity[], timestamp, String:reason[], Handle:plugin, Function:resultCallback) {
+Internal_UnpunishIdentity(String:type[], String:adminName[], String:adminAuth[], String:identity[], timestamp, String:reason[], Handle:plugin, Function:resultCallback) {
 	decl String:escapedType[64], String:escapedAdminName[64], String:escapedAdminAuth[64], pmethod[punishmentType];
 	GetTrieArray(punishments, type, pmethod, sizeof(pmethod));
 
