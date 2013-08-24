@@ -143,13 +143,13 @@ public Action:IRCCommand_Punish(String:nick[], args) {
 	return Plugin_Handled;
 }
 
-public IRCCommand_Punish_Client_Result(targetClient, result, String:adminName[], String:adminAuth[]) {
+public IRCCommand_Punish_Client_Result(targetClient, result, String:adminName[], String:adminAuth[], adminClient) {
 	decl String:targetName[64];
 	GetClientName(targetClient, targetName, sizeof(targetName));
-	IRCCommand_Punish_Identity_Result(targetName, result, adminName, adminAuth);
+	IRCCommand_Punish_Identity_Result(targetName, result, adminName, adminAuth, adminClient);
 }
 
-public IRCCommand_Punish_Identity_Result(String:identity[], result, String:adminName[], String:adminAuth[]) {
+public IRCCommand_Punish_Identity_Result(String:identity[], result, String:adminName[], String:adminAuth[], adminClient) {
 	switch (result) {
 		case SP_SUCCESS: {
 			IRC_ReplyToCommand(adminName, "Successfully punished %s", identity);
@@ -235,13 +235,13 @@ public Action:IRCCommand_Unpunish(String:nick[], args) {
 	return Plugin_Handled;
 }
 
-public IRCCommand_Unpunish_Client_Result(targetClient, result, String:adminName[], String:adminAuth[]) {
+public IRCCommand_Unpunish_Client_Result(targetClient, result, String:adminName[], String:adminAuth[], adminClient) {
 	decl String:targetName[64];
 	GetClientName(targetClient, targetName, sizeof(targetName));
-	IRCCommand_Unpunish_Identity_Result(targetName, result, adminName, adminAuth);
+	IRCCommand_Unpunish_Identity_Result(targetName, result, adminName, adminAuth, adminClient);
 }
 
-public IRCCommand_Unpunish_Identity_Result(String:identity[], result, String:adminName[], String:adminAuth[]) {
+public IRCCommand_Unpunish_Identity_Result(String:identity[], result, String:adminName[], String:adminAuth[], adminClient) {
 	switch (result) {
 		case SP_SUCCESS: {
 			IRC_ReplyToCommand(adminName, "Successfully unpunished %s", identity);
