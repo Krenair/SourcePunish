@@ -17,7 +17,6 @@
  * http://www.gnu.org/copyleft/gpl.html
  */
 
-//TODO: Clear up naming differences such as setBy* -> admin, hndl -> query
 //TODO: Merge Internal_ functions into natives, call natives directly
 //TODO: Change natives to accept multiple targets
 
@@ -255,13 +254,13 @@ public Action:Command_Punish(client, args) {
 		reason[0] = '\0'; // Make it safe per http://wiki.alliedmods.net/Introduction_to_SourcePawn#Caveats
 	}
 
-	decl String:setBy[64], String:setByAuth[64];
+	decl String:adminName[64], String:adminAuth[64];
 	if (client) {
-		GetClientName(client, setBy, sizeof(setBy));
-		GetClientAuthString(client, setByAuth, sizeof(setByAuth));
+		GetClientName(client, adminName, sizeof(adminName));
+		GetClientAuthString(client, adminAuth, sizeof(adminAuth));
 	} else {
-		strcopy(setBy, sizeof(setBy), "Console");
-		strcopy(setByAuth, sizeof(setByAuth), "Console");
+		strcopy(adminName, sizeof(adminName), "Console");
+		strcopy(adminAuth, sizeof(adminAuth), "Console");
 	}
 
 	new String:target_name[MAX_TARGET_LENGTH]; // Stores the noun identifying the target(s)
@@ -296,10 +295,10 @@ public Action:Command_Punish(client, args) {
 
 	if (target_count) {
 		for (new i = 0; i < target_count; i++) {
-			Internal_PunishClient(type, target_list[i], StringToInt(time), reason, setBy, setByAuth, timestamp, INVALID_HANDLE, Command_Punish_Client_Result, client);
+			Internal_PunishClient(type, target_list[i], StringToInt(time), reason, adminName, adminAuth, timestamp, INVALID_HANDLE, Command_Punish_Client_Result, client);
 		}
 	} else {
-		Internal_PunishIdentity(type, target, StringToInt(time), reason, setBy, setByAuth, timestamp, INVALID_HANDLE, Command_Punish_Identity_Result, client);
+		Internal_PunishIdentity(type, target, StringToInt(time), reason, adminName, adminAuth, timestamp, INVALID_HANDLE, Command_Punish_Identity_Result, client);
 	}
 	return Plugin_Handled;
 }
@@ -370,7 +369,7 @@ VALUES (%i, %i, \"%s\", \"%s\", \"%s\", \"%s\", %i, \"%s\", \"%s\", \"%s\");";
 	SQL_TQuery(db, PunishmentRecorded, query, resultCallbackDataPack);
 }
 
-public PunishmentRecorded(Handle:owner, Handle:hndl, const String:error[], any:resultCallbackDataPack) {
+public PunishmentRecorded(Handle:owner, Handle:query, const String:error[], any:resultCallbackDataPack) {
 	decl String:punishedAuth[512], String:punisherName[512], String:punisherAuth[512], String:type[64], String:reason[512];
 
 	new Handle:plugin = Handle:ReadPackCell(resultCallbackDataPack);
@@ -391,7 +390,7 @@ public PunishmentRecorded(Handle:owner, Handle:hndl, const String:error[], any:r
 		} else {
 			Call_PushCell(targetClient);
 		}
-		if (hndl == INVALID_HANDLE) {
+		if (query == INVALID_HANDLE) {
 			Call_PushCell(SP_ERROR_SQL);
 		} else {
 			Call_PushCell(SP_SUCCESS);
@@ -401,7 +400,7 @@ public PunishmentRecorded(Handle:owner, Handle:hndl, const String:error[], any:r
 		Call_PushCell(adminClient);
 		Call_Finish();
 	}
-	if (hndl == INVALID_HANDLE) {
+	if (query == INVALID_HANDLE) {
 		ThrowError("Error while recording punishment: %s", error);
 	} else if (targetClient != -1) {
 		PrintToChat(targetClient, "[SM] You have been punished with %s by %s for %i minutes with reason: %s", type, punisherName, durationMinutes, reason);
@@ -442,13 +441,13 @@ public Action:Command_UnPunish(client, args) {
 		reason[0] = '\0'; // Make it safe per http://wiki.alliedmods.net/Introduction_to_SourcePawn#Caveats
 	}
 
-	decl String:setBy[64], String:setByAuth[64];
+	decl String:adminName[64], String:adminAuth[64];
 	if (client) {
-		GetClientName(client, setBy, sizeof(setBy));
-		GetClientAuthString(client, setByAuth, sizeof(setByAuth));
+		GetClientName(client, adminName, sizeof(adminName));
+		GetClientAuthString(client, adminAuth, sizeof(adminAuth));
 	} else {
-		strcopy(setBy, sizeof(setBy), "Console");
-		strcopy(setByAuth, sizeof(setByAuth), "Console");
+		strcopy(adminName, sizeof(adminName), "Console");
+		strcopy(adminAuth, sizeof(adminAuth), "Console");
 	}
 
 	new String:target_name[MAX_TARGET_LENGTH]; // Stores the noun identifying the target(s)
@@ -483,10 +482,10 @@ public Action:Command_UnPunish(client, args) {
 
 	if (target_count) {
 		for (new i = 0; i < target_count; i++) {
-			Internal_UnpunishClient(type, setBy, setByAuth, target_list[i], timestamp, reason, INVALID_HANDLE, Command_Unpunish_Client_Result, client);
+			Internal_UnpunishClient(type, adminName, adminAuth, target_list[i], timestamp, reason, INVALID_HANDLE, Command_Unpunish_Client_Result, client);
 		}
 	} else {
-		Internal_UnpunishIdentity(type, setBy, setByAuth, target, timestamp, reason, INVALID_HANDLE, Command_Unpunish_Identity_Result, client);
+		Internal_UnpunishIdentity(type, adminName, adminAuth, target, timestamp, reason, INVALID_HANDLE, Command_Unpunish_Identity_Result, client);
 	}
 	return Plugin_Handled;
 }
@@ -626,8 +625,8 @@ public Action:PunishmentExpire(Handle:timer, Handle:punishmentInfoPack) {
 	decl String:type[64];
 	ReadPackString(punishmentInfoPack, type, sizeof(type));
 	new targetClient = ReadPackCell(punishmentInfoPack);
-	decl String:setBy[64];
-	ReadPackString(punishmentInfoPack, setBy, sizeof(setBy));
+	decl String:adminName[64];
+	ReadPackString(punishmentInfoPack, adminName, sizeof(adminName));
 	new setTimestamp = ReadPackCell(punishmentInfoPack);
 
 	RemoveFromTrie(punishmentRemovalTimers[targetClient], type); // This timer is done, no need to try to make it more dead later.
@@ -644,7 +643,7 @@ public Action:PunishmentExpire(Handle:timer, Handle:punishmentInfoPack) {
 		decl String:setReadableTime[64];
 		FormatTime(setReadableTime, sizeof(setReadableTime), "%F at %R (UTC)", setTimestamp); // E.g. "2013-08-03 at 00:12 (UTC)"
 
-		PrintToChat(targetClient, "[SM] Punishment of type %s set by %s on %s expired", type, setBy, setReadableTime);
+		PrintToChat(targetClient, "[SM] Punishment of type %s set by %s on %s expired", type, adminName, setReadableTime);
 	}
 
 	Call_StartForward(pmethod[removeCallback]);
@@ -667,13 +666,13 @@ public APLRes:AskPluginLoad2(Handle:myself, bool:late, String:error[], err_max) 
 public Native_PunishClient(Handle:plugin, numParams) {
 	new timestamp = GetTime();
 
-	decl String:type[64], String:reason[256], String:setByName[64], String:setByAuth[64];
+	decl String:type[64], String:reason[256], String:adminName[64], String:adminAuth[64];
 	GetNativeString(1, type, sizeof(type));
 	new targetClient = GetNativeCell(2);
 	new durationMinutes = GetNativeCell(3);
 	GetNativeString(4, reason, sizeof(reason));
-	GetNativeString(5, setByName, sizeof(setByName));
-	GetNativeString(6, setByAuth, sizeof(setByAuth));
+	GetNativeString(5, adminName, sizeof(adminName));
+	GetNativeString(6, adminAuth, sizeof(adminAuth));
 	new Function:resultCallback = GetNativeCell(7);
 	new adminClient = GetNativeCell(8);
 
@@ -686,18 +685,18 @@ public Native_PunishClient(Handle:plugin, numParams) {
 		return ThrowNativeError(SP_ERROR_NATIVE, "Target client %i is not connected", targetClient);
 	}
 
-	Internal_PunishClient(type, targetClient, durationMinutes, reason, setByName, setByAuth, timestamp, plugin, resultCallback, adminClient);
+	Internal_PunishClient(type, targetClient, durationMinutes, reason, adminName, adminAuth, timestamp, plugin, resultCallback, adminClient);
 	return true;
 }
 
-Internal_PunishClient(String:type[], targetClient, durationMinutes, String:reason[], String:setByName[], String:setByAuth[], timestamp, Handle:plugin, Function:resultCallback, adminClient) {
+Internal_PunishClient(String:type[], targetClient, durationMinutes, String:reason[], String:adminName[], String:adminAuth[], timestamp, Handle:plugin, Function:resultCallback, adminClient) {
 	new Handle:punishmentInfoPack = CreateDataPack();
 	WritePackString(punishmentInfoPack, type);
 	WritePackCell(punishmentInfoPack, targetClient);
 	WritePackCell(punishmentInfoPack, durationMinutes);
 	WritePackString(punishmentInfoPack, reason);
-	WritePackString(punishmentInfoPack, setByName);
-	WritePackString(punishmentInfoPack, setByAuth);
+	WritePackString(punishmentInfoPack, adminName);
+	WritePackString(punishmentInfoPack, adminAuth);
 	WritePackCell(punishmentInfoPack, adminClient);
 	WritePackCell(punishmentInfoPack, timestamp);
 	WritePackCell(punishmentInfoPack, _:plugin);
@@ -716,13 +715,13 @@ Internal_PunishClient(String:type[], targetClient, durationMinutes, String:reaso
 }
 
 public Internal_PunishClient_ExistenceCheckCompleted(Handle:owner, Handle:query, const String:error[], any:punishmentInfoPack) {
-	decl String:type[64], String:reason[513], String:setByName[64], String:setByAuth[64];
+	decl String:type[64], String:reason[513], String:adminName[64], String:adminAuth[64];
 	ReadPackString(punishmentInfoPack, type, sizeof(type));
 	new targetClient = ReadPackCell(punishmentInfoPack);
 	new durationMinutes = ReadPackCell(punishmentInfoPack);
 	ReadPackString(punishmentInfoPack, reason, sizeof(reason));
-	ReadPackString(punishmentInfoPack, setByName, sizeof(setByName));
-	ReadPackString(punishmentInfoPack, setByAuth, sizeof(setByAuth));
+	ReadPackString(punishmentInfoPack, adminName, sizeof(adminName));
+	ReadPackString(punishmentInfoPack, adminAuth, sizeof(adminAuth));
 	new adminClient = ReadPackCell(punishmentInfoPack);
 	new timestamp = ReadPackCell(punishmentInfoPack);
 	new Handle:plugin = Handle:ReadPackCell(punishmentInfoPack);
@@ -732,8 +731,8 @@ public Internal_PunishClient_ExistenceCheckCompleted(Handle:owner, Handle:query,
 		Call_StartFunction(plugin, resultCallback);
 		Call_PushCell(targetClient);
 		Call_PushCell(SP_ERROR_SQL);
-		Call_PushString(setByName);
-		Call_PushString(setByAuth);
+		Call_PushString(adminName);
+		Call_PushString(adminAuth);
 		Call_Finish();
 		ThrowError("Error querying DB: %s", error);
 	}
@@ -743,8 +742,8 @@ public Internal_PunishClient_ExistenceCheckCompleted(Handle:owner, Handle:query,
 		Call_StartFunction(plugin, resultCallback);
 		Call_PushCell(targetClient);
 		Call_PushCell(SP_ERROR_TARGET_ALREADY_PUNISHED);
-		Call_PushString(setByName);
-		Call_PushString(setByAuth);
+		Call_PushString(adminName);
+		Call_PushString(adminAuth);
 		Call_Finish();
 		return;
 	}
@@ -757,7 +756,7 @@ public Internal_PunishClient_ExistenceCheckCompleted(Handle:owner, Handle:query,
 	GetClientAuthString(targetClient, targetAuth, sizeof(targetAuth));
 	GetClientIP(targetClient, targetIP, sizeof(targetIP));
 
-	RecordPunishmentInDB(pmethod[name], setByAuth, setByName, targetAuth, targetName, targetIP, timestamp, durationMinutes, reason, plugin, resultCallback, targetClient, adminClient);
+	RecordPunishmentInDB(pmethod[name], adminAuth, adminName, targetAuth, targetName, targetIP, timestamp, durationMinutes, reason, plugin, resultCallback, targetClient, adminClient);
 	Call_StartForward(pmethod[addCallback]);
 	Call_PushCell(targetClient);
 	Call_PushString(reason);
@@ -767,7 +766,7 @@ public Internal_PunishClient_ExistenceCheckCompleted(Handle:owner, Handle:query,
 		new Handle:punishmentExpiryInfoPack = CreateDataPack();
 		WritePackString(punishmentExpiryInfoPack, pmethod[name]);
 		WritePackCell(punishmentExpiryInfoPack, targetClient);
-		WritePackString(punishmentExpiryInfoPack, setByName);
+		WritePackString(punishmentExpiryInfoPack, adminName);
 		WritePackCell(punishmentExpiryInfoPack, timestamp);
 		ResetPack(punishmentExpiryInfoPack); // Move index back to beginning so we can read from it.
 		new Handle:timer = CreateTimer(float(durationMinutes * 60), PunishmentExpire, punishmentExpiryInfoPack);
@@ -781,13 +780,13 @@ public Internal_PunishClient_ExistenceCheckCompleted(Handle:owner, Handle:query,
 public Native_PunishIdentity(Handle:plugin, numParams) {
 	new timestamp = GetTime();
 
-	decl String:type[64], String:identity[64], String:reason[256], String:setByName[64], String:setByAuth[64], pmethod[punishmentType];
+	decl String:type[64], String:identity[64], String:reason[256], String:adminName[64], String:adminAuth[64], pmethod[punishmentType];
 	GetNativeString(1, type, sizeof(type));
 	GetNativeString(2, identity, sizeof(identity));
 	new durationMinutes = GetNativeCell(3);
 	GetNativeString(4, reason, sizeof(reason));
-	GetNativeString(5, setByName, sizeof(setByName));
-	GetNativeString(6, setByAuth, sizeof(setByAuth));
+	GetNativeString(5, adminName, sizeof(adminName));
+	GetNativeString(6, adminAuth, sizeof(adminAuth));
 	new Function:resultCallback = GetNativeCell(7);
 	new adminClient = GetNativeCell(8);
 
@@ -795,19 +794,19 @@ public Native_PunishIdentity(Handle:plugin, numParams) {
 		return ThrowNativeError(SP_ERROR_NATIVE, "Punishment type %s not found", type);
 	}
 
-	Internal_PunishIdentity(type, identity, durationMinutes, reason, setByName, setByAuth, timestamp, plugin, resultCallback, adminClient);
+	Internal_PunishIdentity(type, identity, durationMinutes, reason, adminName, adminAuth, timestamp, plugin, resultCallback, adminClient);
 
 	return true;
 }
 
-Internal_PunishIdentity(String:type[], String:identity[], durationMinutes, String:reason[], String:setByName[], String:setByAuth[], timestamp, Handle:plugin, Function:resultCallback, adminClient) {
+Internal_PunishIdentity(String:type[], String:identity[], durationMinutes, String:reason[], String:adminName[], String:adminAuth[], timestamp, Handle:plugin, Function:resultCallback, adminClient) {
 	new Handle:punishmentInfoPack = CreateDataPack();
 	WritePackString(punishmentInfoPack, type);
 	WritePackString(punishmentInfoPack, identity);
 	WritePackCell(punishmentInfoPack, durationMinutes);
 	WritePackString(punishmentInfoPack, reason);
-	WritePackString(punishmentInfoPack, setByName);
-	WritePackString(punishmentInfoPack, setByAuth);
+	WritePackString(punishmentInfoPack, adminName);
+	WritePackString(punishmentInfoPack, adminAuth);
 	WritePackCell(punishmentInfoPack, adminClient);
 	WritePackCell(punishmentInfoPack, timestamp);
 	WritePackCell(punishmentInfoPack, _:plugin);
@@ -1398,9 +1397,9 @@ ReasonSelected(client, String:reason[]) {
 	}
 
 	if (adminMenuClientStatusAdding[client]) {
-		decl String:setBy[64], String:setByAuth[64];
-		GetClientName(client, setBy, sizeof(setBy));
-		GetClientAuthString(client, setByAuth, sizeof(setByAuth));
+		decl String:adminName[64], String:adminAuth[64];
+		GetClientName(client, adminName, sizeof(adminName));
+		GetClientAuthString(client, adminAuth, sizeof(adminAuth));
 
 		// TODO: This is wrong and won't work properly. Instead, query the DB before adding the player to the menu (Or maybe we do need to query here as well, to avoid race conditions)
 		new Handle:existingTimer = INVALID_HANDLE;
@@ -1415,7 +1414,7 @@ ReasonSelected(client, String:reason[]) {
 		GetClientAuthString(adminMenuClientStatusTarget[client], targetAuth, sizeof(targetAuth));
 		GetClientIP(adminMenuClientStatusTarget[client], targetIP, sizeof(targetIP));
 
-		RecordPunishmentInDB(pmethod[name], setByAuth, setBy, targetAuth, targetName, targetIP, timestamp, adminMenuClientStatusDuration[client], reason);
+		RecordPunishmentInDB(pmethod[name], adminAuth, adminName, targetAuth, targetName, targetIP, timestamp, adminMenuClientStatusDuration[client], reason);
 		Call_StartForward(pmethod[addCallback]);
 		Call_PushCell(adminMenuClientStatusTarget[client]);
 		Call_PushString(reason);
@@ -1425,7 +1424,7 @@ ReasonSelected(client, String:reason[]) {
 			new Handle:punishmentInfoPack = CreateDataPack();
 			WritePackString(punishmentInfoPack, pmethod[name]);
 			WritePackCell(punishmentInfoPack, adminMenuClientStatusTarget[client]);
-			WritePackString(punishmentInfoPack, setBy);
+			WritePackString(punishmentInfoPack, adminName);
 			WritePackCell(punishmentInfoPack, timestamp);
 			ResetPack(punishmentInfoPack); // Move index back to beginning so we can read from it.
 			new Handle:timer = CreateTimer(float(adminMenuClientStatusDuration[client] * 60), PunishmentExpire, punishmentInfoPack);
@@ -1436,7 +1435,7 @@ ReasonSelected(client, String:reason[]) {
 		}
 
 		PrintToChat(client, "[SM] Punished %s with %s for %i minutes because %s", targetName, pmethod[name], adminMenuClientStatusDuration[client], reason);
-		PrintToChat(adminMenuClientStatusTarget[client], "[SM] %s has punished you with %s for %i minutes with reason: %s", setBy, pmethod[name], adminMenuClientStatusDuration[client], reason);
+		PrintToChat(adminMenuClientStatusTarget[client], "[SM] %s has punished you with %s for %i minutes with reason: %s", adminName, pmethod[name], adminMenuClientStatusDuration[client], reason);
 	} else {
 		decl String:escapedType[64], String:adminName[64], String:adminAuth[64], String:escapedAdminName[64], String:escapedAdminAuth[64];
 		SQL_EscapeString(db, pmethod[name], escapedType, sizeof(escapedType));
