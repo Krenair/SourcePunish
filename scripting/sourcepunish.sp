@@ -17,8 +17,6 @@
  * http://www.gnu.org/copyleft/gpl.html
  */
 
-//TODO: Change natives to accept multiple targets
-
 //TODO: Fix blockrename plugin
 //TODO: Internationalisation/localisation
 //TODO: Decide what to do with Punish_Auth_Type
