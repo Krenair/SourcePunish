@@ -162,7 +162,7 @@ public Action:IRCCommand_Punish(String:nick[], args) {
 			IRC_ReplyToCommand(nick, "[SM] Target should be a Steam ID!");
 			return Plugin_Handled;
 		}
-	} else if (commandType < 2 && (target_count = ProcessTargetString(
+	} else if ((target_count = ProcessTargetString(
 		target,
 		0,
 		target_list,
