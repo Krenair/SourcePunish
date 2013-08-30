@@ -144,8 +144,8 @@ public Action:IRCCommand_Punish(String:nick[], args) {
 		}
 	}
 
-	decl String:setByAuth[64];
-	IRC_GetHostMask(setByAuth, sizeof(setByAuth));
+	decl String:adminAuth[64];
+	IRC_GetHostMask(adminAuth, sizeof(adminAuth));
 
 	new String:target_name[MAX_TARGET_LENGTH]; // Stores the noun identifying the target(s)
 	new target_list[MAXPLAYERS], target_count = 0; // Array to store the clients, and also a variable to store the number of clients
@@ -179,16 +179,16 @@ public Action:IRCCommand_Punish(String:nick[], args) {
 
 	if (commandType == 0) {
 		for (new i = 0; i < target_count; i++) {
-			PunishClient(type, target_list[i], StringToInt(time), reason, nick, setByAuth, IRCCommand_Punish_Client_Result);
+			PunishClient(type, target_list[i], StringToInt(time), reason, nick, adminAuth, IRCCommand_Punish_Client_Result);
 		}
 	} else if (commandType == 1) {
 		for (new i = 0; i < target_count; i++) {
-			UnpunishClient(type, target_list[i], reason, nick, setByAuth, IRCCommand_Unpunish_Client_Result);
+			UnpunishClient(type, target_list[i], reason, nick, adminAuth, IRCCommand_Unpunish_Client_Result);
 		}
 	} else if (commandType == 2) {
-		PunishIdentity(type, target, StringToInt(time), reason, nick, setByAuth, IRCCommand_Punish_Identity_Result);
+		PunishIdentity(type, target, StringToInt(time), reason, nick, adminAuth, IRCCommand_Punish_Identity_Result);
 	} else if (commandType == 3) {
-		UnpunishIdentity(type, target, reason, nick, setByAuth, IRCCommand_Unpunish_Identity_Result);
+		UnpunishIdentity(type, target, reason, nick, adminAuth, IRCCommand_Unpunish_Identity_Result);
 	}
 	return Plugin_Handled;
 }
