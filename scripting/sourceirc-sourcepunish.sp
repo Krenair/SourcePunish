@@ -13,8 +13,19 @@ public Plugin:myinfo = {
 };
 
 public OnPluginStart() {
-	ProcessRegisteredPunishments();
 	LoadTranslations("common.phrases");
+}
+
+public OnLibraryAdded(const String:libraryName[]) {
+	if (StrEqual(libraryName, "sourcepunish")) {
+		ProcessRegisteredPunishments();
+	}
+}
+
+public OnLibraryRemoved(const String:libraryName[]) {
+	if (StrEqual(libraryName, "sourcepunish")) {
+		IRC_CleanUp();
+	}
 }
 
 public OnPluginEnd() {
