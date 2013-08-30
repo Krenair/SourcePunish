@@ -13,6 +13,15 @@ public Plugin:myinfo = {
 };
 
 public OnPluginStart() {
+	ProcessRegisteredPunishments();
+	LoadTranslations("common.phrases");
+}
+
+public OnPluginEnd() {
+	IRC_CleanUp();
+}
+
+public ProcessRegisteredPunishments() {
 	new Handle:registeredPunishments = GetRegisteredPunishmentTypeStrings();
 	for (new i = 0; i < GetArraySize(registeredPunishments); i++) {
 		decl String:type[64], String:displayType[64];
@@ -20,12 +29,6 @@ public OnPluginStart() {
 		GetPunishmentTypeDisplayName(type, displayType, sizeof(displayType));
 		PunishmentRegistered(type, displayType, GetPunishmentTypeFlags(type));
 	}
-
-	LoadTranslations("common.phrases");
-}
-
-public OnPluginEnd() {
-	IRC_CleanUp();
 }
 
 public PunishmentRegistered(String:type[], String:typeDisplayName[], flags) {
@@ -53,6 +56,11 @@ public PunishmentRegistered(String:type[], String:typeDisplayName[], flags) {
 	StrCat(removeCommand, sizeof(removeCommand), type);
 	Format(removeOfflinePlayerCommandDescription, sizeof(removeOfflinePlayerCommandDescription), "%s <steam ID> [reason] - Removes punishment from offline Steam ID of type %s", removeCommand, typeDisplayName);
 	IRC_RegAdminCmd(removeCommand, IRCCommand_Unpunish, ADMFLAG_GENERIC, removeOfflinePlayerCommandDescription);
+}
+
+public PunishmentPluginUnloaded() {
+	IRC_CleanUp();
+	ProcessRegisteredPunishments();
 }
 
 public Action:IRCCommand_Punish(String:nick[], args) {

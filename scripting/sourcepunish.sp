@@ -45,6 +45,7 @@ enum punishmentType {
 	String:name[64], // Eg, "ban" or "spray", database safe name
 	String:displayName[64], // Eg, "Ban" or "Spray", display name for menus, etc.
 	flags,
+	Handle:pluginHandle,
 }
 
 new Handle:punishments = INVALID_HANDLE;
@@ -67,6 +68,7 @@ new Handle:defaultTimes = INVALID_HANDLE;
 new Handle:defaultTimeKeys = INVALID_HANDLE;
 new Handle:steamIDRegex;
 new Handle:punishmentRegisteredForward = INVALID_HANDLE;
+new Handle:punishmentPluginUnloadedForward = INVALID_HANDLE;
 
 public OnPluginStart() {
 	decl String:error[64];
@@ -111,6 +113,7 @@ public OnPluginStart() {
 	AddCommandListener(Command_Say, "say_team");
 
 	punishmentRegisteredForward = CreateGlobalForward("PunishmentRegistered", ET_Ignore, Param_String, Param_String, Param_Cell);
+	punishmentPluginUnloadedForward = CreateGlobalForward("PunishmentPluginUnloaded", ET_Ignore);
 }
 
 public SMCResult:SMC_KeyValue(Handle:smc, const String:key[], const String:value[], bool:key_quotes, bool:value_quotes) {
@@ -218,7 +221,7 @@ public Action:Command_Punish(client, args) {
 	decl String:type[64], pmethod[punishmentType];
 	strcopy(type, sizeof(type), command[typeIndexInCommand]);
 	if (!GetTrieArray(punishments, type, pmethod, sizeof(pmethod))) {
-		ReplyToCommand(client, "[SM] Punishment type %s not found.", type);
+		ReplyToCommand(client, "[SM] Plugin providing punishment type %s has been unloaded.", type);
 		return Plugin_Handled;
 	}
 
@@ -420,7 +423,7 @@ public Action:Command_UnPunish(client, args) {
 	decl String:type[64], pmethod[punishmentType];
 	strcopy(type, sizeof(type), command[typeIndexInCommand]);
 	if (!GetTrieArray(punishments, type, pmethod, sizeof(pmethod))) {
-		ReplyToCommand(client, "[SM] Punishment type %s not found.", type);
+		ReplyToCommand(client, "[SM] Plugin providing punishment type %s has been unloaded.", type);
 		return Plugin_Handled;
 	}
 
@@ -648,7 +651,9 @@ public Action:PunishmentExpire(Handle:timer, Handle:punishmentInfoPack) {
 }
 
 public APLRes:AskPluginLoad2(Handle:myself, bool:late, String:error[], err_max) {
+	RegPluginLibrary("sourcepunish");
 	CreateNative("RegisterPunishment", Native_RegisterPunishment);
+	CreateNative("PunishmentPluginUnload", Native_PunishmentPluginUnload);
 	CreateNative("GetRegisteredPunishmentTypeStrings", Native_GetRegisteredPunishmentTypeStrings);
 	CreateNative("GetPunishmentTypeDisplayName", Native_GetPunishmentTypeDisplayName);
 	CreateNative("GetPunishmentTypeFlags", Native_GetPunishmentTypeFlags);
@@ -657,6 +662,30 @@ public APLRes:AskPluginLoad2(Handle:myself, bool:late, String:error[], err_max) 
 	CreateNative("UnpunishClient", Native_UnpunishClient);
 	CreateNative("UnpunishIdentity", Native_UnpunishIdentity);
 	return APLRes_Success;
+}
+
+public Native_PunishmentPluginUnload(Handle:plugin, numParams) {
+	for (new i = 0; i < GetArraySize(punishmentTypes); i++) {
+		decl String:type[64], pmethod[punishmentType];
+		GetArrayString(punishmentTypes, i, type, sizeof(type));
+		GetTrieArray(punishments, type, pmethod, sizeof(pmethod));
+		if (pmethod[pluginHandle] == plugin) {
+			RemoveFromArray(punishmentTypes, i);
+			RemoveFromTrie(punishments, type);
+			for (new j = 0; j < MAXPLAYERS; j++) {
+				if (punishmentRemovalTimers[j] != INVALID_HANDLE) {
+					new Handle:timer = INVALID_HANDLE;
+					GetTrieValue(punishmentRemovalTimers[j], type, timer);
+					if (timer != INVALID_HANDLE) {
+						KillTimer(timer);
+					}
+					RemoveFromTrie(punishmentRemovalTimers[j], type);
+				}
+			}
+		}
+	}
+	Call_StartForward(punishmentPluginUnloadedForward);
+	Call_Finish();
 }
 
 public Native_PunishClient(Handle:plugin, numParams) {
@@ -1085,6 +1114,7 @@ public Native_RegisterPunishment(Handle:plugin, numParams) {
 	pmethod[removeCallback] = rf;
 
 	pmethod[flags] = GetNativeCell(5);
+	pmethod[pluginHandle] = plugin;
 
 	SetTrieArray(punishments, type, pmethod, sizeof(pmethod));
 	PushArrayString(punishmentTypes, type);

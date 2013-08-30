@@ -1,3 +1,14 @@
+public SharedPlugin:__pl_sourcepunish = {
+	name = "sourcepunish",
+	file = "sourcepunish.smx",
+#if defined REQUIRE_PLUGIN
+	required = 1,
+#else
+	required = 0,
+#endif
+};
+native PunishmentPluginUnload();
+
 #define SP_NOREMOVE 1
 #define SP_NOTIME 1 << 1
 
@@ -6,6 +17,7 @@ functag SPRCB public(client); // SourcePunish Remove CallBack
 native bool:RegisterPunishment(String:type[], String:typeDisplayName[], SPACB:addCallback, SPRCB:removeCallback, flags = 0);
 
 forward PunishmentRegistered(String:type[], String:displayType[], flags);
+forward PunishmentPluginUnloaded(String:type[]);
 
 native Handle:GetRegisteredPunishmentTypeStrings();
 native GetPunishmentTypeDisplayName(String:type[], String:buffer[], maxlen);
