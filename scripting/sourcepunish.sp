@@ -205,23 +205,48 @@ public ActivePunishmentsLookupComplete(Handle:owner, Handle:query, const String:
 }
 
 public Action:Command_Punish(client, args) {
-	if (args < 1) {
-		ReplyToCommand(client, "[SM] Usage: sm_[add]<type> <target> [time|0] [reason]");
+	decl String:command[70], String:twoChars[3], String:threeChars[4];
+	GetCmdArg(0, command, sizeof(command));
+
+	strcopy(twoChars, sizeof(twoChars), command[3]); // Get the first 2 characters (sizeof(twoChars) - 1 = 3 (1 char is for \0)).
+	strcopy(threeChars, sizeof(threeChars), command[3]); // Get the first 3 characters (sizeof(threeChars) - 1 = 3 (1 char is for \0)).
+
+	new commandType = 0; // Values are 0 = normal punish, 1 = normal unpunish, 2 = offline punish, 3 = offline unpunish
+	decl String:type[64];
+	if (StrEqual(twoChars, "un", false)) {
+		commandType = 1;
+		strcopy(type, sizeof(type), command[2 + 3]);
+	} else if (StrEqual(threeChars, "add", false)) {
+		commandType = 2;
+		strcopy(type, sizeof(type), command[3 + 3]);
+	} else if (StrEqual(threeChars, "del", false)) {
+		commandType = 3;
+		strcopy(type, sizeof(type), command[3 + 3]);
+	} else {
+		strcopy(type, sizeof(type), command[3]);
+	}
+
+	decl pmethod[punishmentType];
+	if (!GetTrieArray(punishments, type, pmethod, sizeof(pmethod))) {
+		ReplyToCommand(client, "[SM] Plugin providing punishment type %s has been unloaded.", type);
 		return Plugin_Handled;
 	}
 
-	decl String:command[70], String:prefix[7];
-	GetCmdArg(0, command, sizeof(command));
-	strcopy(prefix, sizeof(prefix), command); // Get the first 6 characters.
-	new typeIndexInCommand = 3; // If the first 6 characters are not "sm_add", the type is after the "sm_" which is 3 characters long.
-	if (StrEqual(prefix, "sm_add", false)) {
-		typeIndexInCommand = 6; // Otherwise, the type is after "sm_add", which is 6 characters long.
-	}
-
-	decl String:type[64], pmethod[punishmentType];
-	strcopy(type, sizeof(type), command[typeIndexInCommand]);
-	if (!GetTrieArray(punishments, type, pmethod, sizeof(pmethod))) {
-		ReplyToCommand(client, "[SM] Plugin providing punishment type %s has been unloaded.", type);
+	if (args < 1) {
+		switch (commandType) {
+			case 0: {
+				ReplyToCommand(client, "Usage: %s <#userid|name> [time|0] [reason]", type);
+			}
+			case 1: {
+				ReplyToCommand(client, "Usage: un%s <#userid|name> [reason]", type);
+			}
+			case 2: {
+				ReplyToCommand(client, "Usage: add%s <steam ID> [reason]", type);
+			}
+			case 3: {
+				ReplyToCommand(client, "Usage: del%s <steam ID> [reason]", type);
+			}
+		}
 		return Plugin_Handled;
 	}
 
@@ -230,27 +255,35 @@ public Action:Command_Punish(client, args) {
 	new pos = BreakString(fullArgString, target, sizeof(target));
 
 	decl String:reason[64];
-	new reasonArgumentNum = 2;
-	if (!(pmethod[flags] & SP_NOTIME)) {
-		reasonArgumentNum = 3;
-	}
+	if (commandType < 2) {
+		new reasonArgumentNum = 2;
+		if (!(pmethod[flags] & SP_NOTIME)) {
+			reasonArgumentNum = 3;
+		}
 
-	if (args >= reasonArgumentNum) {
-		new posAfterTime = -1;
-		if (reasonArgumentNum == 3 && pos != -1) {
-			posAfterTime = BreakString(fullArgString[pos], time, sizeof(time));
+		if (args >= reasonArgumentNum) {
+			new posAfterTime = -1;
+			if (reasonArgumentNum == 3 && pos != -1) {
+				posAfterTime = BreakString(fullArgString[pos], time, sizeof(time));
+			} else {
+				strcopy(time, sizeof(time), "0");
+			}
+
+			if (posAfterTime != -1) {
+				strcopy(reason, sizeof(reason), fullArgString[pos + posAfterTime]);
+			} else {
+				reason[0] = '\0';
+			}
 		} else {
 			strcopy(time, sizeof(time), "0");
-		}
-
-		if (posAfterTime != -1) {
-			strcopy(reason, sizeof(reason), fullArgString[pos + posAfterTime]);
-		} else {
-			reason[0] = '\0';
+			reason[0] = '\0'; // Make it safe per http://wiki.alliedmods.net/Introduction_to_SourcePawn#Caveats
 		}
 	} else {
-		strcopy(time, sizeof(time), "0");
-		reason[0] = '\0'; // Make it safe per http://wiki.alliedmods.net/Introduction_to_SourcePawn#Caveats
+		if (pos != -1) {
+			strcopy(reason, sizeof(reason), fullArgString[pos]);
+		} else {
+			reason[0] = '\0'; // Make it safe per http://wiki.alliedmods.net/Introduction_to_SourcePawn#Caveats
+		}
 	}
 
 	decl String:adminName[64], String:adminAuth[64];
@@ -266,7 +299,7 @@ public Action:Command_Punish(client, args) {
 	new target_list[MAXPLAYERS], target_count = 0; // Array to store the clients, and also a variable to store the number of clients
 	new bool:tn_is_ml; // Stores whether the noun must be translated
 
-	if (typeIndexInCommand == 6) {
+	if (commandType > 1) {
 		// sm_add commands are for offline players
 		if (MatchRegex(steamIDRegex, target) >= 0) {
 			if (ProcessTargetString(target, client, target_list, sizeof(target_list), 0, target_name, sizeof(target_name), tn_is_ml)) {
@@ -277,7 +310,7 @@ public Action:Command_Punish(client, args) {
 			PrintToChat(client, "[SM] Target should be a Steam ID!");
 			return Plugin_Handled;
 		}
-	} else if (typeIndexInCommand == 3 && (target_count = ProcessTargetString(
+	} else if ((target_count = ProcessTargetString(
 		target,
 		client,
 		target_list,
@@ -292,12 +325,18 @@ public Action:Command_Punish(client, args) {
 		return Plugin_Handled;
 	}
 
-	if (target_count) {
+	if (commandType == 0) {
 		for (new i = 0; i < target_count; i++) {
-			PunishClient(type, target_list[i], StringToInt(time), reason, adminName, adminAuth, Command_Punish_Client_Result, client);
+			PunishClient(type, target_list[i], StringToInt(time), reason, adminName, adminAuth, Command_Punish_Client_Result);
 		}
-	} else {
-		PunishIdentity(type, target, StringToInt(time), reason, adminName, adminAuth, Command_Punish_Identity_Result, client);
+	} else if (commandType == 1) {
+		for (new i = 0; i < target_count; i++) {
+			UnpunishClient(type, target_list[i], reason, adminName, adminAuth, Command_Unpunish_Client_Result);
+		}
+	} else if (commandType == 2) {
+		PunishIdentity(type, target, StringToInt(time), reason, adminName, adminAuth, Command_Punish_Identity_Result);
+	} else if (commandType == 3) {
+		UnpunishIdentity(type, target, reason, adminName, adminAuth, Command_Unpunish_Identity_Result);
 	}
 	return Plugin_Handled;
 }
@@ -404,89 +443,6 @@ public PunishmentRecorded(Handle:owner, Handle:query, const String:error[], any:
 	} else if (targetClient != -1) {
 		PrintToChat(targetClient, "[SM] You have been punished with %s by %s for %i minutes with reason: %s", type, punisherName, durationMinutes, reason);
 	}
-}
-
-public Action:Command_UnPunish(client, args) {
-	if (args < 1) {
-		ReplyToCommand(client, "[SM] Usage: sm_<un|del><type> <target> [reason]");
-		return Plugin_Handled;
-	}
-
-	decl String:command[70], String:prefix[7];
-	GetCmdArg(0, command, sizeof(command));
-	strcopy(prefix, sizeof(prefix), command); // Get the first 6 characters.
-	new typeIndexInCommand = 5; // If the first 6 characters are not "sm_del", the type is after the "sm_un" which is 5 characters long.
-	if (StrEqual(prefix, "sm_del", false)) {
-		typeIndexInCommand = 6; // Otherwise, the type is after "sm_del", which is 6 characters long.
-	}
-
-	decl String:type[64], pmethod[punishmentType];
-	strcopy(type, sizeof(type), command[typeIndexInCommand]);
-	if (!GetTrieArray(punishments, type, pmethod, sizeof(pmethod))) {
-		ReplyToCommand(client, "[SM] Plugin providing punishment type %s has been unloaded.", type);
-		return Plugin_Handled;
-	}
-
-	decl String:target[64], String:fullArgString[64];
-	GetCmdArgString(fullArgString, sizeof(fullArgString));
-	new pos = BreakString(fullArgString, target, sizeof(target));
-
-	decl String:reason[64];
-
-	if (pos != -1) {
-		strcopy(reason, sizeof(reason), fullArgString[pos]);
-	} else {
-		reason[0] = '\0'; // Make it safe per http://wiki.alliedmods.net/Introduction_to_SourcePawn#Caveats
-	}
-
-	decl String:adminName[64], String:adminAuth[64];
-	if (client) {
-		GetClientName(client, adminName, sizeof(adminName));
-		GetClientAuthString(client, adminAuth, sizeof(adminAuth));
-	} else {
-		strcopy(adminName, sizeof(adminName), "Console");
-		strcopy(adminAuth, sizeof(adminAuth), "Console");
-	}
-
-	new String:target_name[MAX_TARGET_LENGTH]; // Stores the noun identifying the target(s)
-	new target_list[MAXPLAYERS], target_count = 0; // Array to store the clients, and also a variable to store the number of clients
-	new bool:tn_is_ml; // Stores whether the noun must be translated
-
-	if (typeIndexInCommand == 6) {
-		if (MatchRegex(steamIDRegex, target) == -1) {
-			PrintToChat(client, "[SM] Target should be a Steam ID!");
-			return Plugin_Handled;
-		} else {
-			new String:tn[MAX_TARGET_LENGTH], tl[MAXPLAYERS], bool:tnml;
-			if (ProcessTargetString(target, client, tl, sizeof(tl), 0, tn, sizeof(tn), tnml)) {
-				PrintToChat(client, "[SM] Target is online as %s", tn);
-				return Plugin_Handled;
-			}
-		}
-	} else if (typeIndexInCommand == 5 && (target_count = ProcessTargetString(
-		target,
-		client,
-		target_list,
-		MAXPLAYERS,
-		COMMAND_FILTER_CONNECTED, // We want to allow targetting even players who are not fully in-game but connected
-		target_name,
-		sizeof(target_name),
-		tn_is_ml
-	)) <= 0) {
-		// Reply to the admin with a failure message
-		ReplyToTargetError(client, target_count);
-		return Plugin_Handled;
-	}
-
-	if (target_count) {
-		for (new i = 0; i < target_count; i++) {
-			UnpunishClient(type, target_list[i], reason, adminName, adminAuth, Command_Unpunish_Client_Result, client);
-		}
-	} else {
-		UnpunishIdentity(type, adminName, adminAuth, target, reason, Command_Unpunish_Identity_Result, client);
-	}
-
-	return Plugin_Handled;
 }
 
 public Command_Unpunish_Client_Result(targetClient, result, String:adminName[], String:adminAuth[], adminClient) {
@@ -1135,7 +1091,7 @@ public Native_RegisterPunishment(Handle:plugin, numParams) {
 	if (!(pmethod[flags] & SP_NOREMOVE)) {
 		StrCat(mainRemoveCommand, sizeof(mainRemoveCommand), type);
 		Format(removeCommandDescription, sizeof(removeCommandDescription), "%s <#userid|name> [reason] - Removes punishment from player of type %s", mainRemoveCommand, typeDisplayName);
-		RegAdminCmd(mainRemoveCommand, Command_UnPunish, ADMFLAG_GENERIC, removeCommandDescription);
+		RegAdminCmd(mainRemoveCommand, Command_Punish, ADMFLAG_GENERIC, removeCommandDescription);
 	}
 
 	StrCat(addCommand, sizeof(addCommand), type);
@@ -1144,7 +1100,7 @@ public Native_RegisterPunishment(Handle:plugin, numParams) {
 
 	StrCat(removeCommand, sizeof(removeCommand), type);
 	Format(removeOfflinePlayerCommandDescription, sizeof(removeOfflinePlayerCommandDescription), "%s <steam ID> [reason] - Removes punishment from offline Steam ID of type %s", removeCommand, typeDisplayName);
-	RegAdminCmd(removeCommand, Command_UnPunish, ADMFLAG_GENERIC, removeOfflinePlayerCommandDescription);
+	RegAdminCmd(removeCommand, Command_Punish, ADMFLAG_GENERIC, removeOfflinePlayerCommandDescription);
 
 	Call_StartForward(punishmentRegisteredForward);
 	Call_PushString(type);
