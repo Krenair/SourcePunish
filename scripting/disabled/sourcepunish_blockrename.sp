@@ -1,6 +1,7 @@
 #include <sourcemod>
 #include <sdktools>
 #include <sourcepunish>
+#include <sourcepunish_punishment>
 
 public Plugin:myinfo = {
 	name = "SourcePunish Block name change",
