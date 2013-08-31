@@ -167,9 +167,9 @@ public ActivePunishmentsLookupComplete(Handle:owner, Handle:query, const String:
 	}
 
 	while (SQL_FetchRow(query)) {
-		decl String:type[64], String:punisherName[64], String:punishedAuth[64], String:reason[64];
+		decl String:type[64], String:adminName[64], String:punishedAuth[64], String:reason[64];
 		SQL_FetchString(query, 0, type, sizeof(type));
-		SQL_FetchString(query, 1, punisherName, sizeof(punisherName));
+		SQL_FetchString(query, 1, adminName, sizeof(adminName));
 		SQL_FetchString(query, 2, punishedAuth, sizeof(punishedAuth));
 		SQL_FetchString(query, 3, reason, sizeof(reason));
 		new startTime = SQL_FetchInt(query, 4);
@@ -187,14 +187,14 @@ public ActivePunishmentsLookupComplete(Handle:owner, Handle:query, const String:
 					Call_StartForward(pmethod[addCallback]);
 					Call_PushCell(i);
 					Call_PushString(reason);
-					Call_PushString(punisherName);
+					Call_PushString(adminName);
 					Call_Finish();
 
 					if (!(pmethod[flags] & SP_NOREMOVE)) {
 						new Handle:punishmentInfoPack = CreateDataPack();
 						WritePackString(punishmentInfoPack, type);
 						WritePackCell(punishmentInfoPack, i);
-						WritePackString(punishmentInfoPack, punisherName);
+						WritePackString(punishmentInfoPack, adminName);
 						WritePackCell(punishmentInfoPack, startTime);
 						ResetPack(punishmentInfoPack); // Move index back to beginning so we can read from it.
 						new endTime = startTime + (SQL_FetchInt(query, 5) * 60);
@@ -401,9 +401,9 @@ public UsersActivePunishmentsLookupComplete(Handle:owner, Handle:query, const St
 	}
 
 	while (SQL_FetchRow(query)) {
-		decl String:type[64], String:punisherName[64], String:reason[64];
+		decl String:type[64], String:adminName[64], String:reason[64];
 		SQL_FetchString(query, 0, type, sizeof(type));
-		SQL_FetchString(query, 1, punisherName, sizeof(punisherName));
+		SQL_FetchString(query, 1, adminName, sizeof(adminName));
 		SQL_FetchString(query, 2, reason, sizeof(reason));
 
 		decl pmethod[punishmentType];
@@ -416,7 +416,7 @@ public UsersActivePunishmentsLookupComplete(Handle:owner, Handle:query, const St
 			Call_StartForward(pmethod[addCallback]);
 			Call_PushCell(client);
 			Call_PushString(reason);
-			Call_PushString(punisherName);
+			Call_PushString(adminName);
 			Call_Finish();
 
 			new length = SQL_FetchInt(query, 4);
@@ -425,7 +425,7 @@ public UsersActivePunishmentsLookupComplete(Handle:owner, Handle:query, const St
 				new Handle:punishmentInfoPack = CreateDataPack();
 				WritePackString(punishmentInfoPack, type);
 				WritePackCell(punishmentInfoPack, client);
-				WritePackString(punishmentInfoPack, punisherName);
+				WritePackString(punishmentInfoPack, adminName);
 				WritePackCell(punishmentInfoPack, startTime);
 				ResetPack(punishmentInfoPack); // Move index back to beginning so we can read from it.
 				new endTime = startTime + (length * 60);
@@ -590,8 +590,8 @@ public Native_PunishClient_ExistenceCheckCompleted(Handle:owner, Handle:query, c
 
 RecordPunishmentInDB(
 	String:type[],
-	String:punisherAuth[],
-	String:punisherName[],
+	String:adminAuth[],
+	String:adminName[],
 	String:punishedAuth[],
 	String:punishedName[],
 	String:punishedIP[],
@@ -608,24 +608,24 @@ RecordPunishmentInDB(
 (Punish_Time, Punish_Server_ID, Punish_Player_Name, Punish_Player_ID, Punish_Player_IP, Punish_Type, Punish_Length, Punish_Reason, Punish_Admin_Name, Punish_Admin_ID)\
 VALUES (%i, %i, \"%s\", \"%s\", \"%s\", \"%s\", %i, \"%s\", \"%s\", \"%s\");";
 	//TODO: deal with Punish_Auth_Type, Punish_All_Servers, Punish_All_Mods
-	decl String:escapedType[129], String:escapedPunisherAuth[511], String:escapedPunisherName[511], String:escapedPunishedAuth[511], String:escapedPunishedName[511], String:escapedReason[511];
+	decl String:escapedType[129], String:escapedAdminAuth[511], String:escapedAdminName[511], String:escapedPunishedAuth[511], String:escapedPunishedName[511], String:escapedReason[511];
 	SQL_EscapeString(db, type, escapedType, sizeof(escapedType));
-	SQL_EscapeString(db, punisherAuth, escapedPunisherAuth, sizeof(escapedPunisherAuth));
-	SQL_EscapeString(db, punisherName, escapedPunisherName, sizeof(escapedPunisherName));
+	SQL_EscapeString(db, adminAuth, escapedAdminAuth, sizeof(escapedAdminAuth));
+	SQL_EscapeString(db, adminName, escapedAdminName, sizeof(escapedAdminName));
 	SQL_EscapeString(db, punishedAuth, escapedPunishedAuth, sizeof(escapedPunishedAuth));
 	SQL_EscapeString(db, punishedName, escapedPunishedName, sizeof(escapedPunishedName));
 	SQL_EscapeString(db, reason, escapedReason, sizeof(escapedReason));
 
 	decl String:query[1024];
-	Format(query, sizeof(query), unformattedQuery, startTime, serverID, escapedPunishedName, escapedPunishedAuth, punishedIP, escapedType, length, escapedReason, escapedPunisherName, escapedPunisherAuth);
+	Format(query, sizeof(query), unformattedQuery, startTime, serverID, escapedPunishedName, escapedPunishedAuth, punishedIP, escapedType, length, escapedReason, escapedAdminName, escapedAdminAuth);
 
 	new Handle:resultCallbackDataPack = CreateDataPack();
 	WritePackCell(resultCallbackDataPack, _:plugin);
 	WritePackCell(resultCallbackDataPack, _:resultCallback);
 	WritePackCell(resultCallbackDataPack, targetClient);
 	WritePackString(resultCallbackDataPack, punishedAuth);
-	WritePackString(resultCallbackDataPack, punisherName);
-	WritePackString(resultCallbackDataPack, punisherAuth);
+	WritePackString(resultCallbackDataPack, adminName);
+	WritePackString(resultCallbackDataPack, adminAuth);
 	WritePackCell(resultCallbackDataPack, adminClient);
 	WritePackString(resultCallbackDataPack, type);
 	WritePackCell(resultCallbackDataPack, length);
@@ -636,14 +636,14 @@ VALUES (%i, %i, \"%s\", \"%s\", \"%s\", \"%s\", %i, \"%s\", \"%s\", \"%s\");";
 }
 
 public PunishmentRecorded(Handle:owner, Handle:query, const String:error[], any:resultCallbackDataPack) {
-	decl String:punishedAuth[512], String:punisherName[512], String:punisherAuth[512], String:type[64], String:reason[512];
+	decl String:punishedAuth[512], String:adminName[512], String:adminAuth[512], String:type[64], String:reason[512];
 
 	new Handle:plugin = Handle:ReadPackCell(resultCallbackDataPack);
 	new Function:resultCallback = Function:ReadPackCell(resultCallbackDataPack);
 	new targetClient = ReadPackCell(resultCallbackDataPack);
 	ReadPackString(resultCallbackDataPack, punishedAuth, sizeof(punishedAuth));
-	ReadPackString(resultCallbackDataPack, punisherName, sizeof(punisherName));
-	ReadPackString(resultCallbackDataPack, punisherAuth, sizeof(punisherAuth));
+	ReadPackString(resultCallbackDataPack, adminName, sizeof(adminName));
+	ReadPackString(resultCallbackDataPack, adminAuth, sizeof(adminAuth));
 	new adminClient = ReadPackCell(resultCallbackDataPack);
 	ReadPackString(resultCallbackDataPack, type, sizeof(type));
 	new durationMinutes = ReadPackCell(resultCallbackDataPack);
@@ -662,8 +662,8 @@ public PunishmentRecorded(Handle:owner, Handle:query, const String:error[], any:
 		} else {
 			Call_PushCell(SP_SUCCESS);
 		}
-		Call_PushString(punisherName);
-		Call_PushString(punisherAuth);
+		Call_PushString(adminName);
+		Call_PushString(adminAuth);
 		Call_PushCell(adminClient);
 		Call_Finish();
 	}
@@ -671,7 +671,7 @@ public PunishmentRecorded(Handle:owner, Handle:query, const String:error[], any:
 	if (query == INVALID_HANDLE) {
 		ThrowError("Error while recording punishment: %s", error);
 	} else if (targetClient != -1 && IsClientInGame(targetClient)) {
-		PrintToChat(targetClient, "[SM] You have been punished with %s by %s for %i minutes with reason: %s", type, punisherName, durationMinutes, reason);
+		PrintToChat(targetClient, "[SM] You have been punished with %s by %s for %i minutes with reason: %s", type, adminName, durationMinutes, reason);
 	}
 
 	decl pmethod[punishmentType];
@@ -680,14 +680,14 @@ public PunishmentRecorded(Handle:owner, Handle:query, const String:error[], any:
 	Call_StartForward(pmethod[addCallback]);
 	Call_PushCell(targetClient);
 	Call_PushString(reason);
-	Call_PushString(punisherName);
+	Call_PushString(adminName);
 	Call_Finish();
 
 	if (!(pmethod[flags] & SP_NOREMOVE) && !(pmethod[flags] & SP_NOTIME) && durationMinutes != 0) {
 		new Handle:punishmentExpiryInfoPack = CreateDataPack();
 		WritePackString(punishmentExpiryInfoPack, pmethod[name]);
 		WritePackCell(punishmentExpiryInfoPack, targetClient);
-		WritePackString(punishmentExpiryInfoPack, punisherName);
+		WritePackString(punishmentExpiryInfoPack, adminName);
 		WritePackCell(punishmentExpiryInfoPack, timestamp);
 		ResetPack(punishmentExpiryInfoPack); // Move index back to beginning so we can read from it.
 		new Handle:timer = CreateTimer(float(durationMinutes * 60), PunishmentExpire, punishmentExpiryInfoPack);
@@ -907,10 +907,10 @@ public UnpunishedUser(Handle:owner, Handle:query, const String:error[], any:puni
 	new Function:resultCallback = Function:ReadPackCell(punishmentRemovalInfoPack);
 
 	if (query != INVALID_HANDLE) {
-		PrintToServer("[SM] Removed %s punishment from %s with reason: %s.", type, targetName, reason);
+		PrintToServer("[SM] Removed %s punishment from %s with reason: %s", type, targetName, reason);
 
 		if (targetClient > 0 && IsClientInGame(targetClient)) { // Will be 0/false or -1 if the user is not online
-			PrintToChat(targetClient, "[SM] Your %s punishment has been removed by %s with reason: %s.", type, adminName, reason);
+			PrintToChat(targetClient, "[SM] Your %s punishment has been removed by %s with reason: %s", type, adminName, reason);
 		}
 	}
 
