@@ -51,7 +51,11 @@ public PunishmentRegistered(String:type[], String:typeDisplayName[], flags) {
 		 String:addOfflinePlayerCommandDescription[128],
 		 String:removeOfflinePlayerCommandDescription[128];
 
-	Format(addCommandDescription, sizeof(addCommandDescription), "%s <#userid|name> [expiry|0] [reason] - Punishes a player with a %s", type, typeDisplayName);
+	if (flags & SP_NOTIME) {
+		Format(addCommandDescription, sizeof(addCommandDescription), "%s <#userid|name> [reason] - Punishes a player with a %s", type, typeDisplayName);
+	} else {
+		Format(addCommandDescription, sizeof(addCommandDescription), "%s <#userid|name> [expiry|0] [reason] - Punishes a player with a %s", type, typeDisplayName);
+	}
 	IRC_RegAdminCmd(type, IRCCommand_Punish, GetPunishmentTypeAdminFlag(type), addCommandDescription);
 
 	if (!(flags & SP_NOREMOVE)) {
@@ -104,7 +108,11 @@ public Action:IRCCommand_Punish(String:nick[], args) {
 	if (args < 1) {
 		switch (commandType) {
 			case 0: {
-				IRC_ReplyToCommand(nick, "Usage: %s <#userid|name> [time|0] [reason]", type);
+				if (GetPunishmentTypeFlags(type) & SP_NOTIME) {
+					IRC_ReplyToCommand(nick, "Usage: %s <#userid|name> [reason]", type);
+				} else {
+					IRC_ReplyToCommand(nick, "Usage: %s <#userid|name> [time|0] [reason]", type);
+				}
 			}
 			case 1: {
 				IRC_ReplyToCommand(nick, "Usage: un%s <#userid|name> [reason]", type);

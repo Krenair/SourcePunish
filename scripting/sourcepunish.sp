@@ -242,7 +242,11 @@ public Action:Command_Punish(client, args) {
 	if (args < 1) {
 		switch (commandType) {
 			case 0: {
-				ReplyToCommand(client, "Usage: %s <#userid|name> [time|0] [reason]", type);
+				if (pmethod[flags] & SP_NOTIME) {
+					ReplyToCommand(client, "Usage: %s <#userid|name> [reason]", type);
+				} else {
+					ReplyToCommand(client, "Usage: %s <#userid|name> [time|0] [reason]", type);
+				}
 			}
 			case 1: {
 				ReplyToCommand(client, "Usage: un%s <#userid|name> [reason]", type);
@@ -1120,7 +1124,11 @@ public Native_RegisterPunishment(Handle:plugin, numParams) {
 		 String:removeOfflinePlayerCommandDescription[128];
 
 	StrCat(mainAddCommand, sizeof(mainAddCommand), type);
-	Format(addCommandDescription, sizeof(addCommandDescription), "%s <#userid|name> [expiry|0] [reason] - Punishes a player with a %s", mainAddCommand, typeDisplayName);
+	if (pmethod[flags] & SP_NOTIME) {
+		Format(addCommandDescription, sizeof(addCommandDescription), "%s <#userid|name> [reason] - Punishes a player with a %s", mainAddCommand, typeDisplayName);
+	} else {
+		Format(addCommandDescription, sizeof(addCommandDescription), "%s <#userid|name> [expiry|0] [reason] - Punishes a player with a %s", mainAddCommand, typeDisplayName);
+	}
 	RegAdminCmd(mainAddCommand, Command_Punish, pmethod[adminflag], addCommandDescription);
 
 	if (!(pmethod[flags] & SP_NOREMOVE)) {
