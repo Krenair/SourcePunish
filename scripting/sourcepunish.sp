@@ -282,8 +282,10 @@ public Action:Command_Punish(client, args) {
 
 			if (posAfterTime != -1) {
 				strcopy(reason, sizeof(reason), fullArgString[pos + posAfterTime]);
-			} else {
+			} else if (pmethod[flags] & SP_NOTIME) {
 				strcopy(reason, sizeof(reason), fullArgString[pos]);
+			} else {
+				reason[0] = '\0';
 			}
 		} else {
 			strcopy(time, sizeof(time), "0");

@@ -152,6 +152,8 @@ public Action:IRCCommand_Punish(String:nick[], args) {
 
 			if (posAfterTime != -1) {
 				strcopy(reason, sizeof(reason), fullArgString[pos + posAfterTime]);
+			} else if (GetPunishmentTypeFlags(type) & SP_NOTIME) {
+				strcopy(reason, sizeof(reason), fullArgString[pos]);
 			} else {
 				reason[0] = '\0';
 			}
