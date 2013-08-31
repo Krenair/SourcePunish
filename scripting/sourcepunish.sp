@@ -17,6 +17,7 @@
  * http://www.gnu.org/copyleft/gpl.html
  */
 
+//TODO: Write blockfortwarsprop plugin
 //TODO: Fix blockrename plugin
 //TODO: Internationalisation/localisation
 //TODO: Decide what to do with Punish_Auth_Type
@@ -179,24 +180,26 @@ public ActivePunishmentsLookupComplete(Handle:owner, Handle:query, const String:
 					PrintToServer("Loaded an active punishment with unknown type %s", type);
 				}
 
-				Call_StartForward(pmethod[addCallback]);
-				Call_PushCell(i);
-				Call_PushString(reason);
-				Call_Finish();
+				if (!(pmethod[flags] & SP_NOTIME)) {
+					Call_StartForward(pmethod[addCallback]);
+					Call_PushCell(i);
+					Call_PushString(reason);
+					Call_Finish();
 
-				if (!(pmethod[flags] & SP_NOREMOVE) && !(pmethod[flags] & SP_NOTIME)) {
-					new Handle:punishmentInfoPack = CreateDataPack();
-					WritePackString(punishmentInfoPack, type);
-					WritePackCell(punishmentInfoPack, i);
-					WritePackString(punishmentInfoPack, punisherName);
-					WritePackCell(punishmentInfoPack, startTime);
-					ResetPack(punishmentInfoPack); // Move index back to beginning so we can read from it.
-					new endTime = startTime + (SQL_FetchInt(query, 5) * 60);
-					new Handle:timer = CreateTimer(float(endTime - GetTime()), PunishmentExpire, punishmentInfoPack);
-					if (punishmentRemovalTimers[i] == INVALID_HANDLE) {
-						punishmentRemovalTimers[i] = CreateTrie();
+					if (!(pmethod[flags] & SP_NOREMOVE)) {
+						new Handle:punishmentInfoPack = CreateDataPack();
+						WritePackString(punishmentInfoPack, type);
+						WritePackCell(punishmentInfoPack, i);
+						WritePackString(punishmentInfoPack, punisherName);
+						WritePackCell(punishmentInfoPack, startTime);
+						ResetPack(punishmentInfoPack); // Move index back to beginning so we can read from it.
+						new endTime = startTime + (SQL_FetchInt(query, 5) * 60);
+						new Handle:timer = CreateTimer(float(endTime - GetTime()), PunishmentExpire, punishmentInfoPack);
+						if (punishmentRemovalTimers[i] == INVALID_HANDLE) {
+							punishmentRemovalTimers[i] = CreateTrie();
+						}
+						SetTrieValue(punishmentRemovalTimers[i], type, timer);
 					}
-					SetTrieValue(punishmentRemovalTimers[i], type, timer);
 				}
 				break;
 			}
@@ -404,27 +407,29 @@ public UsersActivePunishmentsLookupComplete(Handle:owner, Handle:query, const St
 			continue;
 		}
 
-		Call_StartForward(pmethod[addCallback]);
-		Call_PushCell(client);
-		Call_PushString(reason);
-		Call_Finish();
+		if (!(pmethod[flags] & SP_NOTIME)) {
+			Call_StartForward(pmethod[addCallback]);
+			Call_PushCell(client);
+			Call_PushString(reason);
+			Call_Finish();
 
-		new length = SQL_FetchInt(query, 4);
-		if (length > 0 && !(pmethod[flags] & SP_NOREMOVE) && !(pmethod[flags] & SP_NOTIME)) {
-			SQL_FetchString(query, 1, punisherName, sizeof(punisherName));
-			new startTime = SQL_FetchInt(query, 3);
-			new Handle:punishmentInfoPack = CreateDataPack();
-			WritePackString(punishmentInfoPack, type);
-			WritePackCell(punishmentInfoPack, client);
-			WritePackString(punishmentInfoPack, punisherName);
-			WritePackCell(punishmentInfoPack, startTime);
-			ResetPack(punishmentInfoPack); // Move index back to beginning so we can read from it.
-			new endTime = startTime + (length * 60);
-			new Handle:timer = CreateTimer(float(endTime - GetTime()), PunishmentExpire, punishmentInfoPack);
-			if (punishmentRemovalTimers[client] == INVALID_HANDLE) {
-				punishmentRemovalTimers[client] = CreateTrie();
+			new length = SQL_FetchInt(query, 4);
+			if (length > 0 && !(pmethod[flags] & SP_NOREMOVE)) {
+				SQL_FetchString(query, 1, punisherName, sizeof(punisherName));
+				new startTime = SQL_FetchInt(query, 3);
+				new Handle:punishmentInfoPack = CreateDataPack();
+				WritePackString(punishmentInfoPack, type);
+				WritePackCell(punishmentInfoPack, client);
+				WritePackString(punishmentInfoPack, punisherName);
+				WritePackCell(punishmentInfoPack, startTime);
+				ResetPack(punishmentInfoPack); // Move index back to beginning so we can read from it.
+				new endTime = startTime + (length * 60);
+				new Handle:timer = CreateTimer(float(endTime - GetTime()), PunishmentExpire, punishmentInfoPack);
+				if (punishmentRemovalTimers[client] == INVALID_HANDLE) {
+					punishmentRemovalTimers[client] = CreateTrie();
+				}
+				SetTrieValue(punishmentRemovalTimers[client], type, timer);
 			}
-			SetTrieValue(punishmentRemovalTimers[client], type, timer);
 		}
 	}
 }
