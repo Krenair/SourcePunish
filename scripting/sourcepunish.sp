@@ -17,6 +17,7 @@
  * http://www.gnu.org/copyleft/gpl.html
  */
 
+//TODO: Make sure all punishment type display names show up reasonably on menu (including submenu titles etc.)
 //TODO: Skip existence check for SP_NOTIME punishments instead of ignoring error
 //TODO: Write blockfortwarsprop plugin
 //TODO: Fix blockrename plugin
@@ -277,7 +278,7 @@ public Action:Command_Punish(client, args) {
 			if (posAfterTime != -1) {
 				strcopy(reason, sizeof(reason), fullArgString[pos + posAfterTime]);
 			} else {
-				reason[0] = '\0';
+				strcopy(reason, sizeof(reason), fullArgString[pos]);
 			}
 		} else {
 			strcopy(time, sizeof(time), "0");
