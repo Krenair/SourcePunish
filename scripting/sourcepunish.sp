@@ -38,7 +38,7 @@ public Plugin:myinfo = {
 	name = "SourcePunish",
 	author = "Alex, Azelphur and MonsterKiller",
 	description = "Punishment management system",
-	version = "0.09",
+	version = "0.1",
 	url = "https://github.com/Krenair/SourcePunish"
 }
 
@@ -187,6 +187,7 @@ public ActivePunishmentsLookupComplete(Handle:owner, Handle:query, const String:
 					Call_StartForward(pmethod[addCallback]);
 					Call_PushCell(i);
 					Call_PushString(reason);
+					Call_PushString(punisherName);
 					Call_Finish();
 
 					if (!(pmethod[flags] & SP_NOREMOVE)) {
@@ -402,6 +403,7 @@ public UsersActivePunishmentsLookupComplete(Handle:owner, Handle:query, const St
 	while (SQL_FetchRow(query)) {
 		decl String:type[64], String:punisherName[64], String:reason[64];
 		SQL_FetchString(query, 0, type, sizeof(type));
+		SQL_FetchString(query, 1, punisherName, sizeof(punisherName));
 		SQL_FetchString(query, 2, reason, sizeof(reason));
 
 		decl pmethod[punishmentType];
@@ -414,11 +416,11 @@ public UsersActivePunishmentsLookupComplete(Handle:owner, Handle:query, const St
 			Call_StartForward(pmethod[addCallback]);
 			Call_PushCell(client);
 			Call_PushString(reason);
+			Call_PushString(punisherName);
 			Call_Finish();
 
 			new length = SQL_FetchInt(query, 4);
 			if (length > 0 && !(pmethod[flags] & SP_NOREMOVE)) {
-				SQL_FetchString(query, 1, punisherName, sizeof(punisherName));
 				new startTime = SQL_FetchInt(query, 3);
 				new Handle:punishmentInfoPack = CreateDataPack();
 				WritePackString(punishmentInfoPack, type);
@@ -678,6 +680,7 @@ public PunishmentRecorded(Handle:owner, Handle:query, const String:error[], any:
 	Call_StartForward(pmethod[addCallback]);
 	Call_PushCell(targetClient);
 	Call_PushString(reason);
+	Call_PushString(punisherName);
 	Call_Finish();
 
 	if (!(pmethod[flags] & SP_NOREMOVE) && !(pmethod[flags] & SP_NOTIME) && durationMinutes != 0) {
@@ -1092,7 +1095,7 @@ public Native_RegisterPunishment(Handle:plugin, numParams) {
 	strcopy(pmethod[name], sizeof(pmethod[name]), type);
 	strcopy(pmethod[displayName], sizeof(pmethod[displayName]), typeDisplayName);
 
-	new Handle:af = CreateForward(ET_Event, Param_Cell, Param_String);
+	new Handle:af = CreateForward(ET_Event, Param_Cell, Param_String, Param_String);
 	AddToForward(af, plugin, GetNativeCell(3));
 	pmethod[addCallback] = af;
 

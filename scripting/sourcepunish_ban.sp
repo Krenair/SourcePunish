@@ -15,8 +15,8 @@ public OnAllPluginsLoaded() {
 	RegisterPunishment("ban", "Ban", AddPunishment, RemovePunishment, SP_NOREMOVE, ADMFLAG_BAN);
 }
 
-public AddPunishment(client, String:reason[]) {
-	KickClient(client, "Banned: %s", reason);
+public AddPunishment(client, String:reason[], String:adminName[]) {
+	KickClient(client, "Banned by %s with reason: %s", adminName, reason);
 }
 
 public RemovePunishment(client) {}

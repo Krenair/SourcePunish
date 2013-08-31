@@ -18,7 +18,7 @@ public OnAllPluginsLoaded() {
 	AddTempEntHook("Player Decal", PlayerSpray);
 }
 
-public AddPunishment(client, String:reason[]) {
+public AddPunishment(client, String:reason[], String:adminName[]) {
 	g_bSprayBanned[client] = true;
 }
 

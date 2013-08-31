@@ -27,7 +27,7 @@ public Action:Command_Say(client, const String:command[], argc) {
 	return Plugin_Continue;
 }
 
-public AddPunishment(client, String:reason[]) {
+public AddPunishment(client, String:reason[], String:adminName[]) {
 	g_bMutedPlayers[client] = true;
 	SetClientListeningFlags(client, VOICE_MUTED);
 }

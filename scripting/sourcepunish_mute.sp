@@ -15,7 +15,7 @@ public OnAllPluginsLoaded() {
 	RegisterPunishment("mute", "Mute", AddPunishment, RemovePunishment, 0, ADMFLAG_CHAT);
 }
 
-public AddPunishment(client, String:reason[]) {
+public AddPunishment(client, String:reason[], String:adminName[]) {
 	SetClientListeningFlags(client, VOICE_MUTED);
 }
 

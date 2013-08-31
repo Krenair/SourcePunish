@@ -15,8 +15,8 @@ public OnAllPluginsLoaded() {
 	RegisterPunishment("kick", "Kick", KickPlayer, RemovePunishment, SP_NOREMOVE | SP_NOTIME, ADMFLAG_KICK);
 }
 
-public KickPlayer(client, String:reason[]) {
-	KickClient(client, reason);
+public KickPlayer(client, String:reason[], String:adminName[]) {
+	KickClient(client, "Kicked by %s with reason: %s", adminName, reason);
 }
 
 public RemovePunishment(client) {}

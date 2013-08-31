@@ -31,7 +31,7 @@ public OnClientDisconnect(client) {
 	mutedPlayers[client] = false;
 }
 
-public GagPlayer(client, String:reason[]) {
+public GagPlayer(client, String:reason[], String:adminName[]) {
 	mutedPlayers[client] = true;
 }
 

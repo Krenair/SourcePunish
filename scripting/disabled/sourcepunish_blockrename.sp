@@ -18,7 +18,7 @@ public OnAllPluginsLoaded() {
 	HookEvent("player_changename", Event_PlayerChangeName, EventHookMode_Pre);
 }
 
-public AddPunishment(client, String:reason[]) {
+public AddPunishment(client, String:reason[], String:adminName[]) {
 	g_bNameBlocked[client] = true;
 }
 
