@@ -52,21 +52,21 @@ public PunishmentRegistered(String:type[], String:typeDisplayName[], flags) {
 		 String:removeOfflinePlayerCommandDescription[128];
 
 	Format(addCommandDescription, sizeof(addCommandDescription), "%s <#userid|name> [expiry|0] [reason] - Punishes a player with a %s", type, typeDisplayName);
-	IRC_RegAdminCmd(type, IRCCommand_Punish, ADMFLAG_GENERIC, addCommandDescription);
+	IRC_RegAdminCmd(type, IRCCommand_Punish, GetPunishmentTypeAdminFlag(type), addCommandDescription);
 
 	if (!(flags & SP_NOREMOVE)) {
 		StrCat(mainRemoveCommand, sizeof(mainRemoveCommand), type);
 		Format(removeCommandDescription, sizeof(removeCommandDescription), "%s <#userid|name> [reason] - Removes punishment from player of type %s", mainRemoveCommand, typeDisplayName);
-		IRC_RegAdminCmd(mainRemoveCommand, IRCCommand_Punish, ADMFLAG_GENERIC, removeCommandDescription);
+		IRC_RegAdminCmd(mainRemoveCommand, IRCCommand_Punish, GetPunishmentTypeAdminFlag(type), removeCommandDescription);
 	}
 
 	StrCat(addCommand, sizeof(addCommand), type);
 	Format(addOfflinePlayerCommandDescription, sizeof(addOfflinePlayerCommandDescription), "%s <steam ID> [reason] - Punishes an offline Steam ID with a %s", addCommand, typeDisplayName);
-	IRC_RegAdminCmd(addCommand, IRCCommand_Punish, ADMFLAG_GENERIC, addOfflinePlayerCommandDescription);
+	IRC_RegAdminCmd(addCommand, IRCCommand_Punish, ADMFLAG_RCON, addOfflinePlayerCommandDescription);
 
 	StrCat(removeCommand, sizeof(removeCommand), type);
 	Format(removeOfflinePlayerCommandDescription, sizeof(removeOfflinePlayerCommandDescription), "%s <steam ID> [reason] - Removes punishment from offline Steam ID of type %s", removeCommand, typeDisplayName);
-	IRC_RegAdminCmd(removeCommand, IRCCommand_Punish, ADMFLAG_GENERIC, removeOfflinePlayerCommandDescription);
+	IRC_RegAdminCmd(removeCommand, IRCCommand_Punish, ADMFLAG_RCON, removeOfflinePlayerCommandDescription);
 }
 
 public PunishmentPluginUnloaded() {

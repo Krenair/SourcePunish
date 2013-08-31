@@ -14,7 +14,7 @@ public Plugin:myinfo = {
 new g_bNameBlocked[MAXPLAYERS + 1];
 
 public OnAllPluginsLoaded() {
-	RegisterPunishment("blockrename", "Name change", AddPunishment, RemovePunishment);
+	RegisterPunishment("blockrename", "Name change", AddPunishment, RemovePunishment, 0, ADMFLAG_CHAT);
 	HookEvent("player_changename", Event_PlayerChangeName, EventHookMode_Pre);
 }
 

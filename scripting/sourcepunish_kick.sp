@@ -12,7 +12,7 @@ public Plugin:myinfo = {
 };
 
 public OnAllPluginsLoaded() {
-	RegisterPunishment("kick", "Kick", KickPlayer, RemovePunishment, SP_NOREMOVE | SP_NOTIME);
+	RegisterPunishment("kick", "Kick", KickPlayer, RemovePunishment, SP_NOREMOVE | SP_NOTIME, ADMFLAG_KICK);
 }
 
 public KickPlayer(client, String:reason[]) {

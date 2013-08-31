@@ -14,7 +14,7 @@ public Plugin:myinfo = {
 new bool:g_bSprayBanned[MAXPLAYERS + 1];
 
 public OnAllPluginsLoaded() {
-	RegisterPunishment("blockspray", "Block Spray", AddPunishment, RemovePunishment);
+	RegisterPunishment("blockspray", "Block Spray", AddPunishment, RemovePunishment, 0, ADMFLAG_CHAT);
 	AddTempEntHook("Player Decal", PlayerSpray);
 }
 

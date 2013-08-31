@@ -14,7 +14,7 @@ public Plugin:myinfo = {
 new mutedPlayers[MAXPLAYERS + 1];
 
 public OnAllPluginsLoaded() {
-	RegisterPunishment("gag", "Gag", GagPlayer, UngagPlayer);
+	RegisterPunishment("gag", "Gag", GagPlayer, UngagPlayer, 0, ADMFLAG_CHAT);
 	AddCommandListener(Command_Say, "say");
 	AddCommandListener(Command_Say, "say2");
 	AddCommandListener(Command_Say, "say_team");

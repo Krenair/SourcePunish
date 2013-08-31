@@ -14,7 +14,7 @@ public Plugin:myinfo = {
 new g_bMutedPlayers[MAXPLAYERS + 1];
 
 public OnAllPluginsLoaded() {
-	RegisterPunishment("silence", "Silence", AddPunishment, RemovePunishment);
+	RegisterPunishment("silence", "Silence", AddPunishment, RemovePunishment, 0, ADMFLAG_CHAT);
 	AddCommandListener(Command_Say, "say");
 	AddCommandListener(Command_Say, "say2");
 	AddCommandListener(Command_Say, "say_team");

@@ -12,7 +12,7 @@ public Plugin:myinfo = {
 };
 
 public OnAllPluginsLoaded() {
-	RegisterPunishment("ban", "Ban", AddPunishment, RemovePunishment, SP_NOREMOVE);
+	RegisterPunishment("ban", "Ban", AddPunishment, RemovePunishment, SP_NOREMOVE, ADMFLAG_BAN);
 }
 
 public AddPunishment(client, String:reason[]) {

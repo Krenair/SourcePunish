@@ -14,7 +14,7 @@ native PunishmentPluginUnload();
 
 functag SPACB public(client, String:reason[]); // SourcePunish Add CallBack
 functag SPRCB public(client); // SourcePunish Remove CallBack
-native bool:RegisterPunishment(String:type[], String:typeDisplayName[], SPACB:addCallback, SPRCB:removeCallback, flags = 0);
+native bool:RegisterPunishment(String:type[], String:typeDisplayName[], SPACB:addCallback, SPRCB:removeCallback, flags = 0, adminflag = ADMFLAG_GENERIC);
 
 forward PunishmentRegistered(String:type[], String:displayType[], flags);
 forward PunishmentPluginUnloaded(String:type[]);
@@ -22,6 +22,7 @@ forward PunishmentPluginUnloaded(String:type[]);
 native Handle:GetRegisteredPunishmentTypeStrings();
 native GetPunishmentTypeDisplayName(String:type[], String:buffer[], maxlen);
 native GetPunishmentTypeFlags(String:type[]);
+native GetPunishmentTypeAdminFlag(String:type[]);
 
 #define SP_SUCCESS 1
 #define SP_ERROR_TARGET_ALREADY_PUNISHED 2

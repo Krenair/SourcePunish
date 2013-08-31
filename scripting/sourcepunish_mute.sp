@@ -12,7 +12,7 @@ public Plugin:myinfo = {
 };
 
 public OnAllPluginsLoaded() {
-	RegisterPunishment("mute", "Mute", AddPunishment, RemovePunishment);
+	RegisterPunishment("mute", "Mute", AddPunishment, RemovePunishment, 0, ADMFLAG_CHAT);
 }
 
 public AddPunishment(client, String:reason[]) {

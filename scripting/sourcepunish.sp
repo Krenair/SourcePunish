@@ -17,6 +17,14 @@
  * http://www.gnu.org/copyleft/gpl.html
  */
 
+/* TODO: Fix errors after kick (or ban?):
+Native "GetClientName" reported: Client 1 is not connected
+Displaying call stack trace for plugin "sourcepunish.smx":
+  [0]  Line 351, sourcepunish.sp::Command_Punish_Client_Result()
+Native "PrintToChat" reported: Client 1 is not in game
+Displaying call stack trace for plugin "sourcepunish.smx":
+  [0]  Line 686, sourcepunish.sp::PunishmentRecorded()
+*/
 //TODO: Skip existence check for SP_NOTIME punishments instead of ignoring error
 //TODO: Write blockfortwarsprop plugin
 //TODO: Fix blockrename plugin
@@ -37,7 +45,7 @@ public Plugin:myinfo = {
 	name = "SourcePunish",
 	author = "Alex, Azelphur and MonsterKiller",
 	description = "Punishment management system",
-	version = "0.08",
+	version = "0.09",
 	url = "https://github.com/Krenair/SourcePunish"
 }
 
@@ -47,6 +55,7 @@ enum punishmentType {
 	String:name[64], // Eg, "ban" or "spray", database safe name
 	String:displayName[64], // Eg, "Ban" or "Spray", display name for menus, etc.
 	flags,
+	adminflag,
 	Handle:pluginHandle,
 }
 
@@ -458,6 +467,7 @@ public APLRes:AskPluginLoad2(Handle:myself, bool:late, String:error[], err_max) 
 	CreateNative("GetRegisteredPunishmentTypeStrings", Native_GetRegisteredPunishmentTypeStrings);
 	CreateNative("GetPunishmentTypeDisplayName", Native_GetPunishmentTypeDisplayName);
 	CreateNative("GetPunishmentTypeFlags", Native_GetPunishmentTypeFlags);
+	CreateNative("GetPunishmentTypeAdminFlag", Native_GetPunishmentTypeAdminFlag);
 	CreateNative("PunishClient", Native_PunishClient);
 	CreateNative("PunishIdentity", Native_PunishIdentity);
 	CreateNative("UnpunishClient", Native_UnpunishClient);
@@ -1061,6 +1071,16 @@ public Native_GetPunishmentTypeFlags(Handle:plugin, numParams) {
 	return pmethod[flags];
 }
 
+public Native_GetPunishmentTypeAdminFlag(Handle:plugin, numParams) {
+	decl String:type[64], pmethod[punishmentType];
+	GetNativeString(1, type, sizeof(type));
+	if (!GetTrieArray(punishments, type, pmethod, sizeof(pmethod))) {
+		return ThrowNativeError(SP_ERROR_NATIVE, "Punishment type %s not found", type);
+	}
+
+	return pmethod[adminflag];
+}
+
 public Native_RegisterPunishment(Handle:plugin, numParams) {
 	decl String:type[64];
 	GetNativeString(1, type, sizeof(type));
@@ -1081,6 +1101,7 @@ public Native_RegisterPunishment(Handle:plugin, numParams) {
 	pmethod[removeCallback] = rf;
 
 	pmethod[flags] = GetNativeCell(5);
+	pmethod[adminflag] = GetNativeCell(6);
 	pmethod[pluginHandle] = plugin;
 
 	SetTrieArray(punishments, type, pmethod, sizeof(pmethod));
@@ -1097,21 +1118,21 @@ public Native_RegisterPunishment(Handle:plugin, numParams) {
 
 	StrCat(mainAddCommand, sizeof(mainAddCommand), type);
 	Format(addCommandDescription, sizeof(addCommandDescription), "%s <#userid|name> [expiry|0] [reason] - Punishes a player with a %s", mainAddCommand, typeDisplayName);
-	RegAdminCmd(mainAddCommand, Command_Punish, ADMFLAG_GENERIC, addCommandDescription);
+	RegAdminCmd(mainAddCommand, Command_Punish, pmethod[adminflag], addCommandDescription);
 
 	if (!(pmethod[flags] & SP_NOREMOVE)) {
 		StrCat(mainRemoveCommand, sizeof(mainRemoveCommand), type);
 		Format(removeCommandDescription, sizeof(removeCommandDescription), "%s <#userid|name> [reason] - Removes punishment from player of type %s", mainRemoveCommand, typeDisplayName);
-		RegAdminCmd(mainRemoveCommand, Command_Punish, ADMFLAG_GENERIC, removeCommandDescription);
+		RegAdminCmd(mainRemoveCommand, Command_Punish, pmethod[adminflag], removeCommandDescription);
 	}
 
 	StrCat(addCommand, sizeof(addCommand), type);
 	Format(addOfflinePlayerCommandDescription, sizeof(addOfflinePlayerCommandDescription), "%s <steam ID> [expiry|0] [reason] - Punishes an offline Steam ID with a %s", addCommand, typeDisplayName);
-	RegAdminCmd(addCommand, Command_Punish, ADMFLAG_GENERIC, addOfflinePlayerCommandDescription);
+	RegAdminCmd(addCommand, Command_Punish, ADMFLAG_RCON, addOfflinePlayerCommandDescription);
 
 	StrCat(removeCommand, sizeof(removeCommand), type);
 	Format(removeOfflinePlayerCommandDescription, sizeof(removeOfflinePlayerCommandDescription), "%s <steam ID> [reason] - Removes punishment from offline Steam ID of type %s", removeCommand, typeDisplayName);
-	RegAdminCmd(removeCommand, Command_Punish, ADMFLAG_GENERIC, removeOfflinePlayerCommandDescription);
+	RegAdminCmd(removeCommand, Command_Punish, ADMFLAG_RCON, removeOfflinePlayerCommandDescription);
 
 	Call_StartForward(punishmentRegisteredForward);
 	Call_PushString(type);
