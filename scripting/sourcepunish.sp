@@ -1138,7 +1138,11 @@ public Native_RegisterPunishment(Handle:plugin, numParams) {
 	}
 
 	StrCat(addCommand, sizeof(addCommand), type);
-	Format(addOfflinePlayerCommandDescription, sizeof(addOfflinePlayerCommandDescription), "%s <steam ID> [expiry|0] [reason] - Punishes an offline Steam ID with a %s", addCommand, typeDisplayName);
+	if (pmethod[flags] & SP_NOTIME) {
+		Format(addOfflinePlayerCommandDescription, sizeof(addOfflinePlayerCommandDescription), "%s <steam ID> [reason] - Punishes an offline Steam ID with a %s", addCommand, typeDisplayName);
+	} else {
+		Format(addOfflinePlayerCommandDescription, sizeof(addOfflinePlayerCommandDescription), "%s <steam ID> [expiry|0] [reason] - Punishes an offline Steam ID with a %s", addCommand, typeDisplayName);
+	}
 	RegAdminCmd(addCommand, Command_Punish, ADMFLAG_RCON, addOfflinePlayerCommandDescription);
 
 	StrCat(removeCommand, sizeof(removeCommand), type);

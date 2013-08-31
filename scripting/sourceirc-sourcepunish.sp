@@ -65,7 +65,11 @@ public PunishmentRegistered(String:type[], String:typeDisplayName[], flags) {
 	}
 
 	StrCat(addCommand, sizeof(addCommand), type);
-	Format(addOfflinePlayerCommandDescription, sizeof(addOfflinePlayerCommandDescription), "%s <steam ID> [reason] - Punishes an offline Steam ID with a %s", addCommand, typeDisplayName);
+	if (flags & SP_NOTIME) {
+		Format(addOfflinePlayerCommandDescription, sizeof(addOfflinePlayerCommandDescription), "%s <steam ID> [reason] - Punishes an offline Steam ID with a %s", addCommand, typeDisplayName);
+	} else {
+		Format(addOfflinePlayerCommandDescription, sizeof(addOfflinePlayerCommandDescription), "%s <steam ID> [expiry|0] [reason] - Punishes an offline Steam ID with a %s", addCommand, typeDisplayName);
+	}
 	IRC_RegAdminCmd(addCommand, IRCCommand_Punish, ADMFLAG_RCON, addOfflinePlayerCommandDescription);
 
 	StrCat(removeCommand, sizeof(removeCommand), type);
