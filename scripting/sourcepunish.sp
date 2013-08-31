@@ -17,14 +17,6 @@
  * http://www.gnu.org/copyleft/gpl.html
  */
 
-/* TODO: Fix errors after kick (or ban?):
-Native "GetClientName" reported: Client 1 is not connected
-Displaying call stack trace for plugin "sourcepunish.smx":
-  [0]  Line 351, sourcepunish.sp::Command_Punish_Client_Result()
-Native "PrintToChat" reported: Client 1 is not in game
-Displaying call stack trace for plugin "sourcepunish.smx":
-  [0]  Line 686, sourcepunish.sp::PunishmentRecorded()
-*/
 //TODO: Skip existence check for SP_NOTIME punishments instead of ignoring error
 //TODO: Write blockfortwarsprop plugin
 //TODO: Fix blockrename plugin
@@ -591,24 +583,6 @@ public Native_PunishClient_ExistenceCheckCompleted(Handle:owner, Handle:query, c
 	GetClientIP(targetClient, targetIP, sizeof(targetIP));
 
 	RecordPunishmentInDB(pmethod[name], adminAuth, adminName, targetAuth, targetName, targetIP, timestamp, durationMinutes, reason, plugin, resultCallback, targetClient, adminClient);
-	Call_StartForward(pmethod[addCallback]);
-	Call_PushCell(targetClient);
-	Call_PushString(reason);
-	Call_Finish();
-
-	if (!(pmethod[flags] & SP_NOREMOVE) && !(pmethod[flags] & SP_NOTIME) && durationMinutes != 0) {
-		new Handle:punishmentExpiryInfoPack = CreateDataPack();
-		WritePackString(punishmentExpiryInfoPack, pmethod[name]);
-		WritePackCell(punishmentExpiryInfoPack, targetClient);
-		WritePackString(punishmentExpiryInfoPack, adminName);
-		WritePackCell(punishmentExpiryInfoPack, timestamp);
-		ResetPack(punishmentExpiryInfoPack); // Move index back to beginning so we can read from it.
-		new Handle:timer = CreateTimer(float(durationMinutes * 60), PunishmentExpire, punishmentExpiryInfoPack);
-		if (punishmentRemovalTimers[targetClient] == INVALID_HANDLE) {
-			punishmentRemovalTimers[targetClient] = CreateTrie();
-		}
-		SetTrieValue(punishmentRemovalTimers[targetClient], pmethod[name], timer);
-	}
 }
 
 RecordPunishmentInDB(
@@ -653,6 +627,7 @@ VALUES (%i, %i, \"%s\", \"%s\", \"%s\", \"%s\", %i, \"%s\", \"%s\", \"%s\");";
 	WritePackString(resultCallbackDataPack, type);
 	WritePackCell(resultCallbackDataPack, length);
 	WritePackString(resultCallbackDataPack, reason);
+	WritePackCell(resultCallbackDataPack, startTime);
 	ResetPack(resultCallbackDataPack);
 	SQL_TQuery(db, PunishmentRecorded, query, resultCallbackDataPack);
 }
@@ -670,6 +645,7 @@ public PunishmentRecorded(Handle:owner, Handle:query, const String:error[], any:
 	ReadPackString(resultCallbackDataPack, type, sizeof(type));
 	new durationMinutes = ReadPackCell(resultCallbackDataPack);
 	ReadPackString(resultCallbackDataPack, reason, sizeof(reason));
+	new timestamp = ReadPackCell(resultCallbackDataPack);
 
 	if (resultCallback != INVALID_FUNCTION) {
 		Call_StartFunction(plugin, resultCallback);
@@ -688,10 +664,33 @@ public PunishmentRecorded(Handle:owner, Handle:query, const String:error[], any:
 		Call_PushCell(adminClient);
 		Call_Finish();
 	}
+
 	if (query == INVALID_HANDLE) {
 		ThrowError("Error while recording punishment: %s", error);
-	} else if (targetClient != -1) {
+	} else if (targetClient != -1 && IsClientInGame(targetClient)) {
 		PrintToChat(targetClient, "[SM] You have been punished with %s by %s for %i minutes with reason: %s", type, punisherName, durationMinutes, reason);
+	}
+
+	decl pmethod[punishmentType];
+	GetTrieArray(punishments, type, pmethod, sizeof(pmethod));
+
+	Call_StartForward(pmethod[addCallback]);
+	Call_PushCell(targetClient);
+	Call_PushString(reason);
+	Call_Finish();
+
+	if (!(pmethod[flags] & SP_NOREMOVE) && !(pmethod[flags] & SP_NOTIME) && durationMinutes != 0) {
+		new Handle:punishmentExpiryInfoPack = CreateDataPack();
+		WritePackString(punishmentExpiryInfoPack, pmethod[name]);
+		WritePackCell(punishmentExpiryInfoPack, targetClient);
+		WritePackString(punishmentExpiryInfoPack, punisherName);
+		WritePackCell(punishmentExpiryInfoPack, timestamp);
+		ResetPack(punishmentExpiryInfoPack); // Move index back to beginning so we can read from it.
+		new Handle:timer = CreateTimer(float(durationMinutes * 60), PunishmentExpire, punishmentExpiryInfoPack);
+		if (punishmentRemovalTimers[targetClient] == INVALID_HANDLE) {
+			punishmentRemovalTimers[targetClient] = CreateTrie();
+		}
+		SetTrieValue(punishmentRemovalTimers[targetClient], pmethod[name], timer);
 	}
 }
 
