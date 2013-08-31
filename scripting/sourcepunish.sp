@@ -17,6 +17,7 @@
  * http://www.gnu.org/copyleft/gpl.html
  */
 
+//TODO: Skip existence check for SP_NOTIME punishments instead of ignoring error
 //TODO: Write blockfortwarsprop plugin
 //TODO: Fix blockrename plugin
 //TODO: Internationalisation/localisation
@@ -559,8 +560,11 @@ public Native_PunishClient_ExistenceCheckCompleted(Handle:owner, Handle:query, c
 		ThrowError("Error querying DB: %s", error);
 	}
 
+	decl pmethod[punishmentType];
+	GetTrieArray(punishments, type, pmethod, sizeof(pmethod));
+
 	SQL_FetchRow(query);
-	if (SQL_FetchInt(query, 0) != 0) {
+	if (SQL_FetchInt(query, 0) != 0 && !(pmethod[flags] & SP_NOTIME)) {
 		Call_StartFunction(plugin, resultCallback);
 		Call_PushCell(targetClient);
 		Call_PushCell(SP_ERROR_TARGET_ALREADY_PUNISHED);
@@ -570,9 +574,6 @@ public Native_PunishClient_ExistenceCheckCompleted(Handle:owner, Handle:query, c
 		Call_Finish();
 		return;
 	}
-
-	decl pmethod[punishmentType];
-	GetTrieArray(punishments, type, pmethod, sizeof(pmethod));
 
 	decl String:targetName[64], String:targetAuth[64], String:targetIP[64];
 	GetClientName(targetClient, targetName, sizeof(targetName));
@@ -747,8 +748,11 @@ public Native_PunishIdentity_ExistenceCheckCompleted(Handle:owner, Handle:query,
 		ThrowError("Error querying DB: %s", error);
 	}
 
+	decl pmethod[punishmentType];
+	GetTrieArray(punishments, type, pmethod, sizeof(pmethod));
+
 	SQL_FetchRow(query);
-	if (SQL_FetchInt(query, 0) != 0) {
+	if (SQL_FetchInt(query, 0) != 0 && !(pmethod[flags] & SP_NOTIME)) {
 		Call_StartFunction(plugin, resultCallback);
 		Call_PushString(identity);
 		Call_PushCell(SP_ERROR_TARGET_ALREADY_PUNISHED);
