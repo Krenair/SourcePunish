@@ -330,16 +330,16 @@ public Action:Command_Punish(client, args) {
 
 	if (commandType == 0) {
 		for (new i = 0; i < target_count; i++) {
-			PunishClient(type, target_list[i], StringToInt(time), reason, adminName, adminAuth, Command_Punish_Client_Result);
+			PunishClient(type, target_list[i], StringToInt(time), reason, adminName, adminAuth, Command_Punish_Client_Result, client);
 		}
 	} else if (commandType == 1) {
 		for (new i = 0; i < target_count; i++) {
-			UnpunishClient(type, target_list[i], reason, adminName, adminAuth, Command_Unpunish_Client_Result);
+			UnpunishClient(type, target_list[i], reason, adminName, adminAuth, Command_Unpunish_Client_Result, client);
 		}
 	} else if (commandType == 2) {
-		PunishIdentity(type, target, StringToInt(time), reason, adminName, adminAuth, Command_Punish_Identity_Result);
+		PunishIdentity(type, target, StringToInt(time), reason, adminName, adminAuth, Command_Punish_Identity_Result, client);
 	} else if (commandType == 3) {
-		UnpunishIdentity(type, target, reason, adminName, adminAuth, Command_Unpunish_Identity_Result);
+		UnpunishIdentity(type, target, reason, adminName, adminAuth, Command_Unpunish_Identity_Result, client);
 	}
 	return Plugin_Handled;
 }
@@ -554,6 +554,7 @@ public Native_PunishClient_ExistenceCheckCompleted(Handle:owner, Handle:query, c
 		Call_PushCell(SP_ERROR_SQL);
 		Call_PushString(adminName);
 		Call_PushString(adminAuth);
+		Call_PushCell(adminClient);
 		Call_Finish();
 		ThrowError("Error querying DB: %s", error);
 	}
@@ -565,6 +566,7 @@ public Native_PunishClient_ExistenceCheckCompleted(Handle:owner, Handle:query, c
 		Call_PushCell(SP_ERROR_TARGET_ALREADY_PUNISHED);
 		Call_PushString(adminName);
 		Call_PushString(adminAuth);
+		Call_PushCell(adminClient);
 		Call_Finish();
 		return;
 	}
