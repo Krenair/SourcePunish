@@ -17,6 +17,7 @@
  * http://www.gnu.org/copyleft/gpl.html
  */
 
+//TODO: Sort out conflict between sm_kick from basecommands and sourcepunish_kick
 //TODO: Make sure all punishment type display names show up reasonably on menu (including submenu titles etc.)
 //TODO: Skip existence check for SP_NOTIME punishments instead of ignoring error
 //TODO: Write blockfortwarsprop plugin
@@ -190,14 +191,15 @@ public ActivePunishmentsLookupComplete(Handle:owner, Handle:query, const String:
 					Call_PushString(adminName);
 					Call_Finish();
 
-					if (!(pmethod[flags] & SP_NOREMOVE)) {
+					new length = SQL_FetchInt(query, 5);
+					if (length > 0 && !(pmethod[flags] & SP_NOREMOVE)) {
 						new Handle:punishmentInfoPack = CreateDataPack();
 						WritePackString(punishmentInfoPack, type);
 						WritePackCell(punishmentInfoPack, i);
 						WritePackString(punishmentInfoPack, adminName);
 						WritePackCell(punishmentInfoPack, startTime);
 						ResetPack(punishmentInfoPack); // Move index back to beginning so we can read from it.
-						new endTime = startTime + (SQL_FetchInt(query, 5) * 60);
+						new endTime = startTime + (length * 60);
 						new Handle:timer = CreateTimer(float(endTime - GetTime()), PunishmentExpire, punishmentInfoPack);
 						if (punishmentRemovalTimers[i] == INVALID_HANDLE) {
 							punishmentRemovalTimers[i] = CreateTrie();
