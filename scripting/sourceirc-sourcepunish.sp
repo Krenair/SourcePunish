@@ -14,6 +14,9 @@ public Plugin:myinfo = {
 
 public OnPluginStart() {
 	LoadTranslations("common.phrases");
+	if (LibraryExists("sourcepunish")) {
+		ProcessRegisteredPunishments();
+	}
 }
 
 public OnLibraryAdded(const String:libraryName[]) {
