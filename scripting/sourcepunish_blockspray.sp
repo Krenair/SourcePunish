@@ -7,7 +7,7 @@ public Plugin:myinfo = {
 	name = "SourcePunish Block Spray",
 	author = "Azelphur",
 	description = "Block Spray plugin for SourcePunish",
-	version = "0.1",
+	version = "0.2",
 	url = "https://github.com/Krenair/SourcePunish"
 };
 

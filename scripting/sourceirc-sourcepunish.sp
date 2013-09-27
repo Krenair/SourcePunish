@@ -8,7 +8,7 @@ public Plugin:myinfo = {
 	name = "SourceIRC -> SourcePunish",
 	author = "Alex",
 	description = "SourcePunish integration plugin for SourceIRC",
-	version = "0.1",
+	version = "0.2",
 	url = "https://github.com/Krenair/SourcePunish"
 };
 
