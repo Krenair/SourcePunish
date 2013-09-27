@@ -18,6 +18,7 @@
  */
 
 //TODO: Sort out conflict between sm_kick from basecommands and sourcepunish_kick
+//TODO: Sort out conflict between sm_blockspray from SprayTracker and sourcepunish_blockspray
 //TODO: Make sure all punishment type display names show up reasonably on menu (including submenu titles etc.)
 //TODO: Skip existence check for SP_NOTIME punishments instead of ignoring error
 //TODO: Write blockfortwarsprop plugin
