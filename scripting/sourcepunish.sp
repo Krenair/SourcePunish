@@ -268,7 +268,7 @@ public Action:Command_Punish(client, args) {
 	new pos = BreakString(fullArgString, target, sizeof(target));
 
 	decl String:reason[64];
-	if (commandType < 2) {
+	if (commandType == 0 || commandType == 2) {
 		new reasonArgumentNum = 2;
 		if (!(pmethod[flags] & SP_NOTIME)) {
 			reasonArgumentNum = 3;

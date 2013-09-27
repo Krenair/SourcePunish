@@ -139,7 +139,7 @@ public Action:IRCCommand_Punish(String:nick[], args) {
 	new pos = BreakString(fullArgString, target, sizeof(target));
 
 	decl String:reason[64];
-	if (commandType < 2) {
+	if (commandType == 0 || commandType == 2) {
 		new reasonArgumentNum = 2;
 		if (!(GetPunishmentTypeFlags(type) & SP_NOTIME)) {
 			reasonArgumentNum = 3;
