@@ -75,6 +75,7 @@ new Handle:defaultTimeKeys = INVALID_HANDLE;
 new Handle:steamIDRegex;
 new Handle:punishmentRegisteredForward = INVALID_HANDLE;
 new Handle:punishmentPluginUnloadedForward = INVALID_HANDLE;
+new ReplySource:commandReplySources[MAXPLAYERS + 1];
 
 public OnPluginStart() {
 	decl String:error[64];
@@ -341,6 +342,7 @@ public Action:Command_Punish(client, args) {
 		return Plugin_Handled;
 	}
 
+	commandReplySources[client] = GetCmdReplySource();
 	if (commandType == 0) {
 		for (new i = 0; i < target_count; i++) {
 			PunishClient(type, target_list[i], StringToInt(time), reason, adminName, adminAuth, Command_Punish_Client_Result, client);
@@ -364,6 +366,8 @@ public Command_Punish_Client_Result(targetClient, result, String:adminName[], St
 }
 
 public Command_Punish_Identity_Result(String:identity[], result, String:adminName[], String:adminAuth[], adminClient) {
+	new ReplySource:oldReplySource = GetCmdReplySource();
+	SetCmdReplySource(commandReplySources[adminClient]);
 	switch (result) {
 		case SP_SUCCESS: {
 			ReplyToCommand(adminClient, "Successfully punished %s", identity);
@@ -375,6 +379,7 @@ public Command_Punish_Identity_Result(String:identity[], result, String:adminNam
 			ReplyToCommand(adminClient, "An SQL error occured while punishing %s", identity);
 		}
 	}
+	SetCmdReplySource(oldReplySource);
 }
 
 public Command_Unpunish_Client_Result(targetClient, result, String:adminName[], String:adminAuth[], adminClient) {
@@ -384,6 +389,8 @@ public Command_Unpunish_Client_Result(targetClient, result, String:adminName[], 
 }
 
 public Command_Unpunish_Identity_Result(String:identity[], result, String:adminName[], String:adminAuth[], adminClient) {
+	new ReplySource:oldReplySource = GetCmdReplySource();
+	SetCmdReplySource(commandReplySources[adminClient]);
 	switch (result) {
 		case SP_SUCCESS: {
 			ReplyToCommand(adminClient, "Successfully unpunished %s", identity);
@@ -395,6 +402,7 @@ public Command_Unpunish_Identity_Result(String:identity[], result, String:adminN
 			ReplyToCommand(adminClient, "An SQL error occured while unpunishing %s", identity);
 		}
 	}
+	SetCmdReplySource(oldReplySource);
 }
 
 public OnClientAuthorized(client, const String:auth[]) {
