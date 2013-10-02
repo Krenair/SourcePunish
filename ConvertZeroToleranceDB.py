@@ -16,6 +16,11 @@ for row in db.fetchall():
 	else:
 		length = (end_time - start_time) / 60
 
+	if remover_name == '':
+		removed = 0
+	else:
+		removed = 1
+
 	if punisher_id == 'Server':
 		punisher_id = 'Console'
 
@@ -32,9 +37,9 @@ for row in db.fetchall():
 		#ZT id 685 by Saber against 'The Master Medic' somehow managed to get a massive negative number as the expiry time
 		length = 0
 
-	rowsToInsert.append((type.lower(), punished_name, punished_id, "", punisher_name, punisher_id, remover_id, remover_name, start_time, length, removal_time, reason, removal_reason, -1))
+	rowsToInsert.append((type.lower(), punished_name, punished_id, "", punisher_name, punisher_id, removed, remover_id, remover_name, start_time, length, removal_time, reason, removal_reason, -1))
 
-insertQuery = "INSERT INTO sourcepunish_punishments (Punish_Type, Punish_Player_Name, Punish_Player_ID, Punish_Player_IP, Punish_Admin_Name, Punish_Admin_ID, UnPunish_Admin_ID, UnPunish_Admin_Name, Punish_Time, Punish_Length, UnPunish_Time, Punish_Reason, UnPunish_Reason, Punish_Server_ID) VALUES "
+insertQuery = "INSERT INTO sourcepunish_punishments (Punish_Type, Punish_Player_Name, Punish_Player_ID, Punish_Player_IP, Punish_Admin_Name, Punish_Admin_ID, UnPunish, UnPunish_Admin_ID, UnPunish_Admin_Name, Punish_Time, Punish_Length, UnPunish_Time, Punish_Reason, UnPunish_Reason, Punish_Server_ID) VALUES "
 for row in rowsToInsert:
 	insertQuery += '('
 	for i in range(0, len(row)):
