@@ -215,6 +215,15 @@ public ActivePunishmentsLookupComplete(Handle:owner, Handle:query, const String:
 	}
 }
 
+stock IsStringNumeric(const String:StringToCheck[]) {
+	for (new i = 0; i < strlen(StringToCheck); i++) {
+		if (!IsCharNumeric(StringToCheck[i])) {
+			return false;
+		}
+	}
+	return true;
+}
+
 public Action:Command_Punish(client, args) {
 	decl String:command[70], String:twoChars[3], String:threeChars[4];
 	GetCmdArg(0, command, sizeof(command));
@@ -268,39 +277,25 @@ public Action:Command_Punish(client, args) {
 	decl String:target[64], String:time[64], String:fullArgString[64];
 	GetCmdArgString(fullArgString, sizeof(fullArgString));
 	new pos = BreakString(fullArgString, target, sizeof(target));
+	new hasReason = (pos != -1);
 
 	decl String:reason[64];
-	if (commandType == 0 || commandType == 2) {
-		new reasonArgumentNum = 2;
-		if (!(pmethod[flags] & SP_NOTIME)) {
-			reasonArgumentNum = 3;
+	if (pos != -1 && (commandType == 0 || commandType == 2) && !(pmethod[flags] & SP_NOTIME)) { // If punishing and the type takes a time
+		new timePos = BreakString(fullArgString[pos], time, sizeof(time));
+		hasReason = (timePos != -1);
+		pos += timePos;
+		if (!IsStringNumeric(time)) {
+			ReplyToCommand(client, "Given time must be numeric (number of minutes).");
+			return Plugin_Handled;
 		}
+	} else { // Otherwise, make the time safe.
+		time[0] = '\0'; // Make it safe per http://wiki.alliedmods.net/Introduction_to_SourcePawn#Caveats
+	}
 
-		if (args >= reasonArgumentNum) {
-			new posAfterTime = -1;
-			if (reasonArgumentNum == 3 && pos != -1) {
-				posAfterTime = BreakString(fullArgString[pos], time, sizeof(time));
-			} else {
-				strcopy(time, sizeof(time), "0");
-			}
-
-			if (posAfterTime != -1) {
-				strcopy(reason, sizeof(reason), fullArgString[pos + posAfterTime]);
-			} else if (pmethod[flags] & SP_NOTIME) {
-				strcopy(reason, sizeof(reason), fullArgString[pos]);
-			} else {
-				reason[0] = '\0';
-			}
-		} else {
-			strcopy(time, sizeof(time), "0");
-			reason[0] = '\0'; // Make it safe per http://wiki.alliedmods.net/Introduction_to_SourcePawn#Caveats
-		}
-	} else {
-		if (pos != -1) {
-			strcopy(reason, sizeof(reason), fullArgString[pos]);
-		} else {
-			reason[0] = '\0'; // Make it safe per http://wiki.alliedmods.net/Introduction_to_SourcePawn#Caveats
-		}
+	if (hasReason) { // If we're not at the end of the string...
+		strcopy(reason, sizeof(reason), fullArgString[pos]); // Copy the reason into the right variable
+	} else { // We're at the end of the string. Make the reason safe.
+		reason[0] = '\0'; // Make it safe per http://wiki.alliedmods.net/Introduction_to_SourcePawn#Caveats
 	}
 
 	decl String:adminName[64], String:adminAuth[64];
