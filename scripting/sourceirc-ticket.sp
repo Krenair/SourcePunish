@@ -18,6 +18,7 @@
 #include <sdktools>
 #undef REQUIRE_PLUGIN
 #include <sourceirc>
+#include <sourcepunish>
 
 #pragma semicolon 1
 
@@ -25,6 +26,8 @@ new Float:SprayLocation[MAXPLAYERS+1][3];
 new String:ReportString[MAXPLAYERS+1][512];
 
 new Handle:kv;
+
+new blockedPlayers[MAXPLAYERS+1]; // SourcePunish: Logged-in players who aren't allowed to use the report function
 
 public Plugin:myinfo = {
 	name = "SourceIRC -> Ticket",
@@ -48,11 +51,15 @@ public OnPluginStart() {
 public OnAllPluginsLoaded() {
 	if (LibraryExists("sourceirc"))
 		IRC_Loaded();
+	if (LibraryExists("sourcepunish"))
+		Punish_Loaded();
 }
 
 public OnLibraryAdded(const String:name[]) {
 	if (StrEqual(name, "sourceirc"))
 		IRC_Loaded();
+	if (StrEqual(name, "sourcepunish"))
+		Punish_Loaded();
 }
 
 IRC_Loaded() {
@@ -60,7 +67,26 @@ IRC_Loaded() {
 	IRC_RegAdminCmd("to", Command_To, ADMFLAG_CHAT, "to <name|#userid> <text> - Send a message to a player");
 }
 
+Punish_Loaded() {
+	RegisterPunishment("silencereports", "Silence report", SilencePlayerReports, UnsilencePlayerReports, 0, ADMFLAG_CHAT);
+}
+
+public OnClientDisconnect(client) {
+	blockedPlayers[client] = false;
+}
+
+public SilencePlayerReports(client, String:reason[], String:adminName[]) {
+	blockedPlayers[client] = true;
+}
+
+public UnsilencePlayerReports(client) {
+	blockedPlayers[client] = false;
+}
+
 public Action:Command_Reply(client, args) {
+	if (blockedPlayers[client]) {
+		return Plugin_Handled;
+	}
 	decl String:Args[256], String:name[64], String:auth[64];
 	GetCmdArgString(Args, sizeof(Args));
 	if (StrEqual(Args, ""))
@@ -126,6 +152,9 @@ public bool:TraceEntityFilterPlayer(entity, contentsMask) {
 }
 
 public Action:Command_Support(client, args) {
+	if (blockedPlayers[client]) {
+		return;
+	}
 	new Handle:hMenu=CreateMenu(MenuHandler_Report);
 	SetMenuTitle(hMenu,"What do you want to report for?");
 	if (!KvJumpToKey(kv, "Ticket")) return;
