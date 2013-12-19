@@ -195,9 +195,19 @@ public Action:IRCCommand_Punish(String:nick[], args) {
 		sizeof(target_name),
 		tn_is_ml
 	)) <= 0) {
-		// Reply to the admin with a failure message
-		IRC_ReplyToTargetError(nick, target_count);
-		return Plugin_Handled;
+		decl String:disconnectedAuth[64];
+		FindDisconnectedSteamIDFromName(target, disconnectedAuth, sizeof(disconnectedAuth));
+		if (StrEqual(disconnectedAuth, "")) {
+			IRC_ReplyToTargetError(nick, target_count); // Reply to the admin with a failure message
+			return Plugin_Handled;
+		} else {
+			if (commandType == 0) {
+				commandType = 2;
+			} else if (commandType == 1) {
+				commandType = 3;
+			}
+			strcopy(target, sizeof(target), disconnectedAuth);
+		}
 	}
 
 	if (commandType == 0) {

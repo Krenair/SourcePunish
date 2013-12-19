@@ -23,6 +23,7 @@ native Handle:GetRegisteredPunishmentTypeStrings();
 native GetPunishmentTypeDisplayName(String:type[], String:buffer[], maxlen);
 native GetPunishmentTypeFlags(String:type[]);
 native GetPunishmentTypeAdminFlag(String:type[]);
+native Handle:FindDisconnectedSteamIDFromName(String:target[], String:buffer[], maxlen);
 
 #define SP_SUCCESS 1
 #define SP_ERROR_TARGET_ALREADY_PUNISHED 2

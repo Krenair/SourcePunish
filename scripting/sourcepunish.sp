@@ -54,6 +54,11 @@ enum punishmentType {
 	Handle:pluginHandle,
 }
 
+enum disconnectedPlayer {
+	String:playerName[64],
+	String:playerAuth[64],
+}
+
 new Handle:punishments = INVALID_HANDLE;
 new Handle:punishmentTypes = INVALID_HANDLE;
 new Handle:punishmentRemovalTimers[MAXPLAYERS + 1];
@@ -76,6 +81,7 @@ new Handle:steamIDRegex;
 new Handle:punishmentRegisteredForward = INVALID_HANDLE;
 new Handle:punishmentPluginUnloadedForward = INVALID_HANDLE;
 new ReplySource:commandReplySources[MAXPLAYERS + 1];
+new Handle:disconnectedPlayerCache = INVALID_HANDLE;
 
 public OnPluginStart() {
 	decl String:error[64];
@@ -121,6 +127,8 @@ public OnPluginStart() {
 
 	punishmentRegisteredForward = CreateGlobalForward("PunishmentRegistered", ET_Ignore, Param_String, Param_String, Param_Cell);
 	punishmentPluginUnloadedForward = CreateGlobalForward("PunishmentPluginUnloaded", ET_Ignore);
+
+	disconnectedPlayerCache = CreateArray(128);
 }
 
 public SMCResult:SMC_KeyValue(Handle:smc, const String:key[], const String:value[], bool:key_quotes, bool:value_quotes) {
@@ -332,9 +340,19 @@ public Action:Command_Punish(client, args) {
 		sizeof(target_name),
 		tn_is_ml
 	)) <= 0) {
-		// Reply to the admin with a failure message
-		ReplyToTargetError(client, target_count);
-		return Plugin_Handled;
+		decl String:disconnectedAuth[64];
+		FindDisconnectedSteamIDFromName(target, disconnectedAuth, sizeof(disconnectedAuth));
+		if (StrEqual(disconnectedAuth, "")) {
+			ReplyToTargetError(client, target_count); // Reply to the admin with a failure message
+			return Plugin_Handled;
+		} else {
+			if (commandType == 0) {
+				commandType = 2;
+			} else if (commandType == 1) {
+				commandType = 3;
+			}
+			strcopy(target, sizeof(target), disconnectedAuth);
+		}
 	}
 
 	commandReplySources[client] = GetCmdReplySource();
@@ -465,6 +483,15 @@ public OnClientDisconnect(client) {
 		}
 		punishmentRemovalTimers[client] = INVALID_HANDLE;
 	}
+
+	// Add the player to the disconnected list in case we want to punish them after they leave
+	decl disconnectedPlayerEnum[disconnectedPlayer];
+	GetClientName(client, disconnectedPlayerEnum[playerName], sizeof(disconnectedPlayerEnum[playerName]));
+	GetClientAuthString(client, disconnectedPlayerEnum[playerAuth], sizeof(disconnectedPlayerEnum[playerAuth]));
+	PushArrayArray(disconnectedPlayerCache, disconnectedPlayerEnum, sizeof(disconnectedPlayerEnum));
+	if (GetArraySize(disconnectedPlayerCache) > 10) { // If we've got more than 10 in the cache
+		RemoveFromArray(disconnectedPlayerCache, 0); // Remove the first so we remain at 10
+	}
 }
 
 public APLRes:AskPluginLoad2(Handle:myself, bool:late, String:error[], err_max) {
@@ -475,6 +502,7 @@ public APLRes:AskPluginLoad2(Handle:myself, bool:late, String:error[], err_max) 
 	CreateNative("GetPunishmentTypeDisplayName", Native_GetPunishmentTypeDisplayName);
 	CreateNative("GetPunishmentTypeFlags", Native_GetPunishmentTypeFlags);
 	CreateNative("GetPunishmentTypeAdminFlag", Native_GetPunishmentTypeAdminFlag);
+	CreateNative("FindDisconnectedSteamIDFromName", Native_FindDisconnectedSteamIDFromName);
 	CreateNative("PunishClient", Native_PunishClient);
 	CreateNative("PunishIdentity", Native_PunishIdentity);
 	CreateNative("UnpunishClient", Native_UnpunishClient);
@@ -682,7 +710,13 @@ public PunishmentRecorded(Handle:owner, Handle:query, const String:error[], any:
 
 	if (query == INVALID_HANDLE) {
 		ThrowError("Error while recording punishment: %s", error);
-	} else if (targetClient != -1 && IsClientInGame(targetClient)) {
+	}
+
+	if (targetClient == -1) {
+		return;
+	}
+
+	if (IsClientInGame(targetClient)) {
 		PrintToChat(targetClient, "[SM] You have been punished with %s by %s for %i minutes with reason: %s", type, adminName, durationMinutes, reason);
 	}
 
@@ -1094,6 +1128,23 @@ public Native_GetPunishmentTypeAdminFlag(Handle:plugin, numParams) {
 	}
 
 	return pmethod[adminflag];
+}
+
+public Native_FindDisconnectedSteamIDFromName(Handle:plugin, numParams) {
+	decl String:target[64];
+	GetNativeString(1, target, sizeof(target));
+
+	for (new i = 0; i < GetArraySize(disconnectedPlayerCache); i++) {
+		decl disconnectedPlayerEnum[disconnectedPlayer];
+		GetArrayArray(disconnectedPlayerCache, i, disconnectedPlayerEnum, sizeof(disconnectedPlayerEnum));
+		if (StrContains(disconnectedPlayerEnum[playerName], target) != -1) {
+			PrintToServer(disconnectedPlayerEnum[playerName]);
+			PrintToServer(disconnectedPlayerEnum[playerAuth]);
+			SetNativeString(2, disconnectedPlayerEnum[playerAuth], GetNativeCell(3)); // Copy string into buffer (param 2). maxlen is param 3.
+			return;
+		}
+	}
+	SetNativeString(2, "", GetNativeCell(3)); // Copy blank string into buffer (param 2). maxlen is param 3.
 }
 
 public Native_RegisterPunishment(Handle:plugin, numParams) {
