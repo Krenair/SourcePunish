@@ -1225,8 +1225,44 @@ public Native_RegisterPunishment(Handle:plugin, numParams) {
 		AddPunishmentMenuItems(pmethod, mainAddCommand, mainRemoveCommand);
 	}
 
+	if (!GetClientCount()) {
+		return true;
+	}
+
+	new clientListMaxLength = (64 + 4) * MaxClients;
+	decl String:onlineClientAuthList[clientListMaxLength];
+	strcopy(onlineClientAuthList, clientListMaxLength, "\"");
+	for (new i = 1; i <= MaxClients; i++) {
+		if (IsClientAuthorized(i)) {
+			decl String:auth[64], String:escapedAuth[64];
+			GetClientAuthString(i, auth, sizeof(auth));
+			SQL_EscapeString(db, auth, escapedAuth, sizeof(escapedAuth));
+
+			StrCat(escapedAuth, sizeof(escapedAuth), "\", \"");
+			StrCat(onlineClientAuthList, clientListMaxLength, escapedAuth);
+		}
+	}
+	onlineClientAuthList[strlen(onlineClientAuthList) - 3] = 0;
+
 	decl String:query[512];
-	Format(query, sizeof(query), "SELECT Punish_Type, Punish_Admin_Name, Punish_Player_ID, Punish_Reason, Punish_Time, Punish_Length FROM sourcepunish_punishments WHERE Punish_Type = '%s' AND UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0);", type, serverID);
+	Format(
+		query,
+		sizeof(query),
+		"SELECT \
+			Punish_Type, Punish_Admin_Name, Punish_Player_ID, Punish_Reason, Punish_Time, Punish_Length \
+		FROM \
+			sourcepunish_punishments \
+		WHERE \
+			Punish_Type = '%s' AND \
+			UnPunish = 0 AND \
+			(Punish_Server_ID = %i OR Punish_All_Servers = 1) AND \
+			((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0) AND \
+			Punish_Player_ID IN (%s)\
+		;",
+		type,
+		serverID,
+		onlineClientAuthList
+	);
 	SQL_TQuery(db, ActivePunishmentsLookupComplete, query);
 
 	return true;
