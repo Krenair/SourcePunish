@@ -424,7 +424,22 @@ public Command_Unpunish_Identity_Result(String:identity[], result, String:adminN
 public OnClientAuthorized(client, const String:auth[]) {
 	decl String:escapedAuth[64], String:query[512];
 	SQL_EscapeString(db, auth, escapedAuth, sizeof(escapedAuth));
-	Format(query, sizeof(query), "SELECT Punish_Type, Punish_Admin_Name, Punish_Reason, Punish_Time, Punish_Length FROM sourcepunish_punishments WHERE Punish_Player_ID = '%s' AND UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0);", escapedAuth, serverID);
+	Format(
+		query,
+		sizeof(query),
+		"SELECT \
+			Punish_Type, Punish_Admin_Name, Punish_Reason, Punish_Time, Punish_Length \
+		FROM \
+			sourcepunish_punishments \
+		WHERE \
+			UnPunish = 0 AND \
+			(Punish_Server_ID = %i OR Punish_All_Servers = 1) AND \
+			((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0) \
+			Punish_Player_ID = '%s' AND \
+		;",
+		escapedAuth,
+		serverID
+	);
 	SQL_TQuery(db, UsersActivePunishmentsLookupComplete, query, client);
 }
 
@@ -578,7 +593,24 @@ public Native_PunishClient(Handle:plugin, numParams) {
 	decl String:query[1000], String:escapedType[64], String:escapedTargetAuth[64];
 	SQL_EscapeString(db, targetAuth, escapedTargetAuth, sizeof(escapedTargetAuth));
 	SQL_EscapeString(db, pmethod[name], escapedType, sizeof(escapedType));
-	Format(query, sizeof(query), "SELECT COUNT(*) FROM sourcepunish_punishments WHERE UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0) AND Punish_Type = '%s' AND Punish_Player_ID = '%s';", serverID, escapedType, escapedTargetAuth);
+	Format(
+		query,
+		sizeof(query),
+		"SELECT \
+			COUNT(*) \
+		FROM \
+			sourcepunish_punishments \
+		WHERE \
+			UnPunish = 0 AND \
+			(Punish_Server_ID = %i OR Punish_All_Servers = 1) AND \
+			((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0) AND \
+			Punish_Type = '%s' AND \
+			Punish_Player_ID = '%s' \
+		;",
+		serverID,
+		escapedType,
+		escapedTargetAuth
+	);
 	SQL_TQuery(db, Native_PunishClient_ExistenceCheckCompleted, query, punishmentInfoPack);
 
 	return true;
@@ -647,9 +679,34 @@ RecordPunishmentInDB(
 	adminClient = 0
 ) {
 	// Unfortunately you can't do threaded queries for prepared statements - this is https://bugs.alliedmods.net/show_bug.cgi?id=3519
-	decl String:unformattedQuery[300] = "INSERT INTO sourcepunish_punishments\
-(Punish_Time, Punish_Server_ID, Punish_Player_Name, Punish_Player_ID, Punish_Player_IP, Punish_Type, Punish_Length, Punish_Reason, Punish_Admin_Name, Punish_Admin_ID)\
-VALUES (%i, %i, \"%s\", \"%s\", \"%s\", \"%s\", %i, \"%s\", \"%s\", \"%s\");";
+	decl String:unformattedQuery[300] = "\
+	INSERT INTO \
+		sourcepunish_punishments\
+		( \
+			Punish_Time, \
+			Punish_Server_ID, \
+			Punish_Player_Name, \
+			Punish_Player_ID, \
+			Punish_Player_IP, \
+			Punish_Type, \
+			Punish_Length, \
+			Punish_Reason, \
+			Punish_Admin_Name, \
+			Punish_Admin_ID \
+		)\
+	VALUES \
+		( \
+			%i, \
+			%i, \
+			\"%s\", \
+			\"%s\", \
+			\"%s\", \
+			\"%s\", \
+			%i, \
+			\"%s\", \
+			\"%s\", \"%s\" \
+		) \
+	;";
 	//TODO: deal with Punish_Auth_Type, Punish_All_Servers, Punish_All_Mods
 	decl String:escapedType[129], String:escapedAdminAuth[511], String:escapedAdminName[511], String:escapedPunishedAuth[511], String:escapedPunishedName[511], String:escapedReason[511];
 	SQL_EscapeString(db, type, escapedType, sizeof(escapedType));
@@ -780,7 +837,24 @@ public Native_PunishIdentity(Handle:plugin, numParams) {
 	decl String:query[1000], String:escapedType[64], String:escapedTargetAuth[64];
 	SQL_EscapeString(db, identity, escapedTargetAuth, sizeof(escapedTargetAuth));
 	SQL_EscapeString(db, pmethod[name], escapedType, sizeof(escapedType));
-	Format(query, sizeof(query), "SELECT COUNT(*) FROM sourcepunish_punishments WHERE UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0) AND Punish_Type = '%s' AND Punish_Player_ID = '%s';", serverID, escapedType, escapedTargetAuth);
+	Format(
+		query,
+		sizeof(query),
+		"SELECT \
+			COUNT(*) \
+		FROM \
+			sourcepunish_punishments \
+		WHERE \
+			UnPunish = 0 AND \
+			(Punish_Server_ID = %i OR Punish_All_Servers = 1) AND \
+			((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0) AND \
+			Punish_Type = '%s' AND \
+			Punish_Player_ID = '%s' \
+		;",
+		serverID,
+		escapedType,
+		escapedTargetAuth
+	);
 	SQL_TQuery(db, Native_PunishIdentity_ExistenceCheckCompleted, query, punishmentInfoPack);
 
 	return true;
@@ -871,7 +945,24 @@ public Native_UnpunishClient(Handle:plugin, numParams) {
 	SQL_EscapeString(db, pmethod[name], escapedType, sizeof(escapedType));
 	SQL_EscapeString(db, adminName, escapedAdminName, sizeof(escapedAdminName));
 	SQL_EscapeString(db, adminAuth, escapedAdminAuth, sizeof(escapedAdminAuth));
-	Format(query, sizeof(query), "SELECT COUNT(*) FROM sourcepunish_punishments WHERE UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0) AND Punish_Type = '%s' AND Punish_Player_ID = '%s';", serverID, escapedType, escapedTargetAuth);
+	Format(
+		query,
+		sizeof(query),
+		"SELECT \
+			COUNT(*) \
+		FROM \
+			sourcepunish_punishments \
+		WHERE \
+			UnPunish = 0 AND \
+			(Punish_Server_ID = %i OR Punish_All_Servers = 1) AND \
+			((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0) AND \
+			Punish_Type = '%s' AND \
+			Punish_Player_ID = '%s' \
+		;",
+		serverID,
+		escapedType,
+		escapedTargetAuth
+	);
 	SQL_TQuery(db, Native_UnpunishClient_ExistenceCheckCompleted, query, punishmentRemovalInfoPack);
 
 	return true;
@@ -927,7 +1018,22 @@ public Native_UnpunishClient_ExistenceCheckCompleted(Handle:owner, Handle:query,
 	SQL_EscapeString(db, adminName, escapedAdminName, sizeof(escapedAdminName));
 	SQL_EscapeString(db, adminAuth, escapedAdminAuth, sizeof(escapedAdminAuth));
 	SQL_EscapeString(db, targetAuth, escapedTargetAuth, sizeof(escapedTargetAuth));
-	Format(updateQuery, sizeof(updateQuery), "UPDATE sourcepunish_punishments SET UnPunish = 1, UnPunish_Admin_Name = '%s', UnPunish_Admin_ID = '%s', UnPunish_Time = %i, UnPunish_Reason = '%s' WHERE UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND Punish_Player_ID = '%s' AND Punish_Type = '%s' AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0);", escapedAdminName, escapedAdminAuth, timestamp, reason, serverID, escapedTargetAuth, escapedType);
+	Format(
+		updateQuery,
+		sizeof(updateQuery),
+		"UPDATE \
+			sourcepunish_punishments \
+		SET \
+			UnPunish = 1, UnPunish_Admin_Name = '%s', UnPunish_Admin_ID = '%s', UnPunish_Time = %i, UnPunish_Reason = '%s' \
+		WHERE \
+			UnPunish = 0 AND \
+			(Punish_Server_ID = %i OR Punish_All_Servers = 1) AND \
+			Punish_Player_ID = '%s' AND \
+			Punish_Type = '%s' AND \
+			((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0)\
+		;",
+		escapedAdminName, escapedAdminAuth, timestamp, reason, serverID, escapedTargetAuth, escapedType
+	);
 
 	SQL_TQuery(db, UnpunishedUser, updateQuery, punishmentRemovalInfoPack);
 
@@ -1020,7 +1126,24 @@ public Native_UnpunishIdentity(Handle:plugin, numParams) {
 	SQL_EscapeString(db, pmethod[name], escapedType, sizeof(escapedType));
 	SQL_EscapeString(db, adminName, escapedAdminName, sizeof(escapedAdminName));
 	SQL_EscapeString(db, adminAuth, escapedAdminAuth, sizeof(escapedAdminAuth));
-	Format(query, sizeof(query), "SELECT COUNT(*) FROM sourcepunish_punishments WHERE UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0) AND Punish_Type = '%s' AND Punish_Player_ID = '%s';", serverID, escapedType, escapedTargetAuth);
+	Format(
+		query,
+		sizeof(query),
+		"SELECT \
+			COUNT(*) \
+		FROM \
+			sourcepunish_punishments \
+		WHERE \
+			UnPunish = 0 AND \
+			(Punish_Server_ID = %i OR Punish_All_Servers = 1) AND \
+			((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0) AND \
+			Punish_Type = '%s' AND \
+			Punish_Player_ID = '%s' \
+		;",
+		serverID,
+		escapedType,
+		escapedTargetAuth
+	);
 	SQL_TQuery(db, Native_UnpunishIdentity_ExistenceCheckCompleted, query, punishmentRemovalInfoPack);
 
 	return true;
@@ -1064,7 +1187,32 @@ public Native_UnpunishIdentity_ExistenceCheckCompleted(Handle:owner, Handle:quer
 	SQL_EscapeString(db, adminAuth, escapedAdminAuth, sizeof(escapedAdminAuth));
 	SQL_EscapeString(db, type, escapedType, sizeof(escapedType));
 
-	Format(updateQuery, sizeof(updateQuery), "UPDATE sourcepunish_punishments SET UnPunish = 1, UnPunish_Admin_Name = '%s', UnPunish_Admin_ID = '%s', UnPunish_Time = %i, UnPunish_Reason = '%s' WHERE UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND Punish_Player_ID = '%s' AND Punish_Type = '%s' AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0);", escapedAdminName, escapedAdminAuth, timestamp, reason, serverID, escapedTargetAuth, escapedType);
+	Format(
+		updateQuery,
+		sizeof(updateQuery),
+		"UPDATE \
+			sourcepunish_punishments \
+		SET \
+			UnPunish = 1, \
+			UnPunish_Admin_Name = '%s', \
+			UnPunish_Admin_ID = '%s', \
+			UnPunish_Time = %i, \
+			UnPunish_Reason = '%s' \
+		WHERE \
+			UnPunish = 0 AND \
+			(Punish_Server_ID = %i OR Punish_All_Servers = 1) AND \
+			Punish_Player_ID = '%s' AND \
+			Punish_Type = '%s' AND \
+			((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0)\
+		;",
+		escapedAdminName,
+		escapedAdminAuth,
+		timestamp,
+		reason,
+		serverID,
+		escapedTargetAuth,
+		escapedType
+	);
 	SQL_TQuery(db, UnpunishedUser, updateQuery, punishmentRemovalInfoPack);
 }
 
@@ -1363,7 +1511,22 @@ AdminMenu_PunishmentProcessAction(TopMenuAction:action, client, String:buffer[],
 			WritePackCell(menuSelectDataPack, client);
 			WritePackCell(menuSelectDataPack, _:menu);
 			ResetPack(menuSelectDataPack);
-			Format(query, sizeof(query), "SELECT DISTINCT Punish_Player_ID FROM sourcepunish_punishments WHERE Punish_Type = '%s' AND UnPunish = 0 AND (Punish_Server_ID = %i OR Punish_All_Servers = 1) AND ((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0);", pmethod[name], serverID);
+			Format(
+				query,
+				sizeof(query),
+				"SELECT \
+					DISTINCT Punish_Player_ID \
+				FROM \
+					sourcepunish_punishments \
+				WHERE \
+					UnPunish = 0 AND \
+					(Punish_Server_ID = %i OR Punish_All_Servers = 1) AND \
+					((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0) \
+					Punish_Type = '%s' AND \
+				;",
+				pmethod[name],
+				serverID
+			);
 			SQL_TQuery(db, FoundPlayersWithActivePunishment, query, menuSelectDataPack);
 		}
 	}
