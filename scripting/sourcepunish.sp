@@ -170,7 +170,7 @@ public ActivePunishmentsLookupComplete(Handle:owner, Handle:query, const String:
 	}
 	decl String:clientAuths[MAXPLAYERS + 1][64];
 	for (new i = 1; i <= MaxClients; i++) {
-		if (IsClientConnected(i)) {
+		if (IsClientAuthorized(i)) {
 			decl String:auth[64];
 			GetClientAuthString(i, auth, sizeof(auth));
 			strcopy(clientAuths[i], sizeof(clientAuths[]), auth);
@@ -186,6 +186,9 @@ public ActivePunishmentsLookupComplete(Handle:owner, Handle:query, const String:
 		new startTime = SQL_FetchInt(query, 4);
 
 		for (new i = 1; i <= MaxClients; i++) {
+			if (!IsClientAuthorized(i)) {
+				continue;
+			}
 			decl String:auth[64];
 			strcopy(auth, sizeof(auth), clientAuths[i]);
 			if (StrEqual(punishedAuth, auth)) {
