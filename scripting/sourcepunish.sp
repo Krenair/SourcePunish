@@ -434,8 +434,8 @@ public OnClientAuthorized(client, const String:auth[]) {
 		WHERE \
 			UnPunish = 0 AND \
 			(Punish_Server_ID = %i OR Punish_All_Servers = 1) AND \
-			((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0) \
-			Punish_Player_ID = '%s' AND \
+			((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0) AND \
+			Punish_Player_ID = '%s' \
 		;",
 		escapedAuth,
 		serverID
