@@ -276,7 +276,11 @@ public Action:Command_Punish(client, args) {
 				ReplyToCommand(client, "Usage: un%s <#userid|name> [reason]", type);
 			}
 			case 2: {
-				ReplyToCommand(client, "Usage: add%s <steam ID> [reason]", type);
+				if (pmethod[flags] & SP_NOTIME) {
+					ReplyToCommand(client, "Usage: add%s <steam ID> [reason]", type);
+				} else {
+					ReplyToCommand(client, "Usage: add%s <steam ID> [time|0] [reason]", type);
+				}
 			}
 			case 3: {
 				ReplyToCommand(client, "Usage: del%s <steam ID> [reason]", type);
