@@ -137,7 +137,7 @@ public Action:IRCCommand_Punish(String:nick[], args) {
 				if (GetPunishmentTypeFlags(type) & SP_NOTIME) {
 					IRC_ReplyToCommand(nick, "Usage: add%s <steam ID> [reason]", type);
 				} else {
-					IRC_ReplyToCommand(nick, "Usage: add%s <steamID> [time|0] [reason]", type);
+					IRC_ReplyToCommand(nick, "Usage: add%s <steam ID> [time|0] [reason]", type);
 				}
 			}
 			case 3: {
