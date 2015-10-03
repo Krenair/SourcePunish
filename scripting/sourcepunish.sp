@@ -276,7 +276,11 @@ public Action:Command_Punish(client, args) {
 				ReplyToCommand(client, "Usage: un%s <#userid|name> [reason]", type);
 			}
 			case 2: {
-				ReplyToCommand(client, "Usage: add%s <steam ID> [reason]", type);
+				if (pmethod[flags] & SP_NOTIME) {
+					ReplyToCommand(client, "Usage: add%s <steam ID> [reason]", type);
+				} else {
+					ReplyToCommand(client, "Usage: add%s <steam ID> [time|0] [reason]", type);
+				}
 			}
 			case 3: {
 				ReplyToCommand(client, "Usage: del%s <steam ID> [reason]", type);
@@ -285,22 +289,26 @@ public Action:Command_Punish(client, args) {
 		return Plugin_Handled;
 	}
 
-	decl String:target[64], String:time[64], String:fullArgString[64];
+	decl String:target[64], String:timeStr[64], String:fullArgString[64];
 	GetCmdArgString(fullArgString, sizeof(fullArgString));
 	new pos = BreakString(fullArgString, target, sizeof(target));
 	new hasReason = (pos != -1);
+	new time = 0;
+	if (pmethod[flags] & SP_NOTIME) {
+		time = -1;
+	}
 
 	decl String:reason[64];
 	if (pos != -1 && (commandType == 0 || commandType == 2) && !(pmethod[flags] & SP_NOTIME)) { // If punishing and the type takes a time
-		new timePos = BreakString(fullArgString[pos], time, sizeof(time));
+		new timePos = BreakString(fullArgString[pos], timeStr, sizeof(timeStr));
 		hasReason = (timePos != -1);
 		pos += timePos;
-		if (!IsStringNumeric(time)) {
+		if (IsStringNumeric(timeStr)) {
+			time = StringToInt(timeStr);
+		} else {
 			ReplyToCommand(client, "Given time must be numeric (number of minutes).");
 			return Plugin_Handled;
 		}
-	} else { // Otherwise, make the time safe.
-		time[0] = '\0'; // Make it safe per http://wiki.alliedmods.net/Introduction_to_SourcePawn#Caveats
 	}
 
 	if (hasReason) { // If we're not at the end of the string...
@@ -361,14 +369,14 @@ public Action:Command_Punish(client, args) {
 	commandReplySources[client] = GetCmdReplySource();
 	if (commandType == 0) {
 		for (new i = 0; i < target_count; i++) {
-			PunishClient(type, target_list[i], StringToInt(time), reason, adminName, adminAuth, Command_Punish_Client_Result, client);
+			PunishClient(type, target_list[i], time, reason, adminName, adminAuth, Command_Punish_Client_Result, client);
 		}
 	} else if (commandType == 1) {
 		for (new i = 0; i < target_count; i++) {
 			UnpunishClient(type, target_list[i], reason, adminName, adminAuth, Command_Unpunish_Client_Result, client);
 		}
 	} else if (commandType == 2) {
-		PunishIdentity(type, target, StringToInt(time), reason, adminName, adminAuth, Command_Punish_Identity_Result, client);
+		PunishIdentity(type, target, time, reason, adminName, adminAuth, Command_Punish_Identity_Result, client);
 	} else if (commandType == 3) {
 		UnpunishIdentity(type, target, reason, adminName, adminAuth, Command_Unpunish_Identity_Result, client);
 	}
@@ -434,8 +442,8 @@ public OnClientAuthorized(client, const String:auth[]) {
 		WHERE \
 			UnPunish = 0 AND \
 			(Punish_Server_ID = %i OR Punish_All_Servers = 1) AND \
-			((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0) \
-			Punish_Player_ID = '%s' AND \
+			((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0) AND \
+			Punish_Player_ID = '%s' \
 		;",
 		escapedAuth,
 		serverID
@@ -1013,11 +1021,12 @@ public Native_UnpunishClient_ExistenceCheckCompleted(Handle:owner, Handle:query,
 	Call_PushCell(targetClient);
 	Call_Finish();
 
-	decl String:updateQuery[512], String:escapedType[64], String:escapedAdminName[64], String:escapedAdminAuth[64], String:escapedTargetAuth[64];
+	decl String:updateQuery[512], String:escapedType[64], String:escapedAdminName[64], String:escapedAdminAuth[64], String:escapedTargetAuth[64], String:escapedReason[511];
 	SQL_EscapeString(db, type, escapedType, sizeof(escapedType));
 	SQL_EscapeString(db, adminName, escapedAdminName, sizeof(escapedAdminName));
 	SQL_EscapeString(db, adminAuth, escapedAdminAuth, sizeof(escapedAdminAuth));
 	SQL_EscapeString(db, targetAuth, escapedTargetAuth, sizeof(escapedTargetAuth));
+	SQL_EscapeString(db, reason, escapedReason, sizeof(escapedReason));
 	Format(
 		updateQuery,
 		sizeof(updateQuery),
@@ -1032,7 +1041,7 @@ public Native_UnpunishClient_ExistenceCheckCompleted(Handle:owner, Handle:query,
 			Punish_Type = '%s' AND \
 			((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0)\
 		;",
-		escapedAdminName, escapedAdminAuth, timestamp, reason, serverID, escapedTargetAuth, escapedType
+		escapedAdminName, escapedAdminAuth, timestamp, escapedReason, serverID, escapedTargetAuth, escapedType
 	);
 
 	SQL_TQuery(db, UnpunishedUser, updateQuery, punishmentRemovalInfoPack);
@@ -1181,11 +1190,12 @@ public Native_UnpunishIdentity_ExistenceCheckCompleted(Handle:owner, Handle:quer
 
 	GetTrieArray(punishments, type, pmethod, sizeof(pmethod));
 
-	decl String:updateQuery[512], String:escapedType[64], String:escapedTargetAuth[64], String:escapedAdminName[64], String:escapedAdminAuth[64];
+	decl String:updateQuery[512], String:escapedType[64], String:escapedTargetAuth[64], String:escapedAdminName[64], String:escapedAdminAuth[64], String:escapedReason[511];
 	SQL_EscapeString(db, targetAuth, escapedTargetAuth, sizeof(escapedTargetAuth));
 	SQL_EscapeString(db, adminName, escapedAdminName, sizeof(escapedAdminName));
 	SQL_EscapeString(db, adminAuth, escapedAdminAuth, sizeof(escapedAdminAuth));
 	SQL_EscapeString(db, type, escapedType, sizeof(escapedType));
+	SQL_EscapeString(db, reason, escapedReason, sizeof(escapedReason));
 
 	Format(
 		updateQuery,
@@ -1208,7 +1218,7 @@ public Native_UnpunishIdentity_ExistenceCheckCompleted(Handle:owner, Handle:quer
 		escapedAdminName,
 		escapedAdminAuth,
 		timestamp,
-		reason,
+		escapedReason,
 		serverID,
 		escapedTargetAuth,
 		escapedType
