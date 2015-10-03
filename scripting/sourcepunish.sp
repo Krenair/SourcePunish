@@ -1021,11 +1021,12 @@ public Native_UnpunishClient_ExistenceCheckCompleted(Handle:owner, Handle:query,
 	Call_PushCell(targetClient);
 	Call_Finish();
 
-	decl String:updateQuery[512], String:escapedType[64], String:escapedAdminName[64], String:escapedAdminAuth[64], String:escapedTargetAuth[64];
+	decl String:updateQuery[512], String:escapedType[64], String:escapedAdminName[64], String:escapedAdminAuth[64], String:escapedTargetAuth[64], String:escapedReason[511];
 	SQL_EscapeString(db, type, escapedType, sizeof(escapedType));
 	SQL_EscapeString(db, adminName, escapedAdminName, sizeof(escapedAdminName));
 	SQL_EscapeString(db, adminAuth, escapedAdminAuth, sizeof(escapedAdminAuth));
 	SQL_EscapeString(db, targetAuth, escapedTargetAuth, sizeof(escapedTargetAuth));
+	SQL_EscapeString(db, reason, escapedReason, sizeof(escapedReason));
 	Format(
 		updateQuery,
 		sizeof(updateQuery),
@@ -1040,7 +1041,7 @@ public Native_UnpunishClient_ExistenceCheckCompleted(Handle:owner, Handle:query,
 			Punish_Type = '%s' AND \
 			((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0)\
 		;",
-		escapedAdminName, escapedAdminAuth, timestamp, reason, serverID, escapedTargetAuth, escapedType
+		escapedAdminName, escapedAdminAuth, timestamp, escapedReason, serverID, escapedTargetAuth, escapedType
 	);
 
 	SQL_TQuery(db, UnpunishedUser, updateQuery, punishmentRemovalInfoPack);
@@ -1189,11 +1190,12 @@ public Native_UnpunishIdentity_ExistenceCheckCompleted(Handle:owner, Handle:quer
 
 	GetTrieArray(punishments, type, pmethod, sizeof(pmethod));
 
-	decl String:updateQuery[512], String:escapedType[64], String:escapedTargetAuth[64], String:escapedAdminName[64], String:escapedAdminAuth[64];
+	decl String:updateQuery[512], String:escapedType[64], String:escapedTargetAuth[64], String:escapedAdminName[64], String:escapedAdminAuth[64], String:escapedReason[511];
 	SQL_EscapeString(db, targetAuth, escapedTargetAuth, sizeof(escapedTargetAuth));
 	SQL_EscapeString(db, adminName, escapedAdminName, sizeof(escapedAdminName));
 	SQL_EscapeString(db, adminAuth, escapedAdminAuth, sizeof(escapedAdminAuth));
 	SQL_EscapeString(db, type, escapedType, sizeof(escapedType));
+	SQL_EscapeString(db, reason, escapedReason, sizeof(escapedReason));
 
 	Format(
 		updateQuery,
@@ -1216,7 +1218,7 @@ public Native_UnpunishIdentity_ExistenceCheckCompleted(Handle:owner, Handle:quer
 		escapedAdminName,
 		escapedAdminAuth,
 		timestamp,
-		reason,
+		escapedReason,
 		serverID,
 		escapedTargetAuth,
 		escapedType
