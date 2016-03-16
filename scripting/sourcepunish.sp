@@ -172,7 +172,7 @@ public ActivePunishmentsLookupComplete(Handle:owner, Handle:query, const String:
 	for (new i = 1; i <= MaxClients; i++) {
 		if (IsClientAuthorized(i)) {
 			decl String:auth[64];
-			GetClientAuthString(i, auth, sizeof(auth));
+			GetClientAuthId(i, AuthId_Steam2, auth, sizeof(auth));
 			strcopy(clientAuths[i], sizeof(clientAuths[]), auth);
 		}
 	}
@@ -320,7 +320,7 @@ public Action:Command_Punish(client, args) {
 	decl String:adminName[64], String:adminAuth[64];
 	if (client) {
 		GetClientName(client, adminName, sizeof(adminName));
-		GetClientAuthString(client, adminAuth, sizeof(adminAuth));
+		GetClientAuthId(client, AuthId_Steam2, adminAuth, sizeof(adminAuth));
 	} else {
 		strcopy(adminName, sizeof(adminName), "Console");
 		strcopy(adminAuth, sizeof(adminAuth), "Console");
@@ -431,14 +431,14 @@ public Command_Unpunish_Identity_Result(String:identity[], result, String:adminN
 
 public OnClientAuthorized(client, const String:auth[]) {
 	decl String:escapedAuth[64], String:clientIP[45], String:escapedClientIP[90], String:IPQuery[100], String:query[512];
-    // Get client IP and format IP query
-    if (GetClientIP(client, clientIP, sizeof(clientIP))) {
-        SQL_EscapeString(db, clientIP, escapedClientIP, sizeof(escapedClientIP));
-        Format(IPQuery, sizeof(IPQuery), "OR (Punish_Auth_Type = 'ip' AND Punish_Player_IP = '%s')", escapedClientIP);
-    } else {
-        Format(IPQuery, sizeof(IPQuery), "");
-    }
-    
+	// Get client IP and format IP query
+	if (GetClientIP(client, clientIP, sizeof(clientIP))) {
+		SQL_EscapeString(db, clientIP, escapedClientIP, sizeof(escapedClientIP));
+		Format(IPQuery, sizeof(IPQuery), "OR (Punish_Auth_Type = 'ip' AND Punish_Player_IP = '%s')", escapedClientIP);
+	} else {
+		Format(IPQuery, sizeof(IPQuery), "");
+	}
+
 	SQL_EscapeString(db, auth, escapedAuth, sizeof(escapedAuth));
 	Format(
 		query,
@@ -455,7 +455,7 @@ public OnClientAuthorized(client, const String:auth[]) {
 		;",
 		serverID,
 		escapedAuth,
-        IPQuery
+		IPQuery
 	);
 	SQL_TQuery(db, UsersActivePunishmentsLookupComplete, query, client);
 }
@@ -522,7 +522,7 @@ public OnClientDisconnect(client) {
 	// Add the player to the disconnected list in case we want to punish them after they leave
 	decl disconnectedPlayerEnum[disconnectedPlayer];
 	GetClientName(client, disconnectedPlayerEnum[playerName], sizeof(disconnectedPlayerEnum[playerName]));
-	GetClientAuthString(client, disconnectedPlayerEnum[playerAuth], sizeof(disconnectedPlayerEnum[playerAuth]));
+	GetClientAuthId(client, AuthId_Steam2, disconnectedPlayerEnum[playerAuth], sizeof(disconnectedPlayerEnum[playerAuth]));
 	PushArrayArray(disconnectedPlayerCache, disconnectedPlayerEnum, sizeof(disconnectedPlayerEnum));
 	if (GetArraySize(disconnectedPlayerCache) > 10) { // If we've got more than 10 in the cache
 		RemoveFromArray(disconnectedPlayerCache, 0); // Remove the first so we remain at 10
@@ -605,7 +605,7 @@ public Native_PunishClient(Handle:plugin, numParams) {
 	ResetPack(punishmentInfoPack); // Move index back to beginning so we can read from it.
 
 	decl String:targetAuth[64];
-	GetClientAuthString(targetClient, targetAuth, sizeof(targetAuth));
+	GetClientAuthId(targetClient, AuthId_Steam2, targetAuth, sizeof(targetAuth));
 
 	decl String:query[1000], String:escapedType[64], String:escapedTargetAuth[64];
 	SQL_EscapeString(db, targetAuth, escapedTargetAuth, sizeof(escapedTargetAuth));
@@ -674,7 +674,7 @@ public Native_PunishClient_ExistenceCheckCompleted(Handle:owner, Handle:query, c
 
 	decl String:targetName[64], String:targetAuth[64], String:targetIP[64];
 	GetClientName(targetClient, targetName, sizeof(targetName));
-	GetClientAuthString(targetClient, targetAuth, sizeof(targetAuth));
+	GetClientAuthId(targetClient, AuthId_Steam2, targetAuth, sizeof(targetAuth));
 	GetClientIP(targetClient, targetIP, sizeof(targetIP));
 
 	RecordPunishmentInDB(pmethod[name], adminAuth, adminName, targetAuth, targetName, targetIP, timestamp, durationMinutes, reason, plugin, resultCallback, targetClient, adminClient);
@@ -941,7 +941,7 @@ public Native_UnpunishClient(Handle:plugin, numParams) {
 
 	decl String:targetName[64], String:targetAuth[64];
 	GetClientName(targetClient, targetName, sizeof(targetName));
-	GetClientAuthString(targetClient, targetAuth, sizeof(targetAuth));
+	GetClientAuthId(targetClient, AuthId_Steam2, targetAuth, sizeof(targetAuth));
 
 	new Handle:punishmentRemovalInfoPack = CreateDataPack();
 	WritePackCell(punishmentRemovalInfoPack, targetClient);
@@ -1405,7 +1405,7 @@ public Native_RegisterPunishment(Handle:plugin, numParams) {
 	for (new i = 1; i <= MaxClients; i++) {
 		if (IsClientAuthorized(i)) {
 			decl String:auth[64], String:escapedAuth[64];
-			GetClientAuthString(i, auth, sizeof(auth));
+			GetClientAuthId(i, AuthId_Steam2, auth, sizeof(auth));
 			SQL_EscapeString(db, auth, escapedAuth, sizeof(escapedAuth));
 
 			StrCat(escapedAuth, sizeof(escapedAuth), "\", \"");
@@ -1561,7 +1561,7 @@ public FoundPlayersWithActivePunishment(Handle:owner, Handle:query, const String
 	for (new i = 1; i <= MaxClients; i++) {
 		if (IsClientConnected(i)) {
 			decl String:auth[64];
-			GetClientAuthString(i, auth, sizeof(auth));
+			GetClientAuthId(i, AuthId_Steam2, auth, sizeof(auth));
 			SetTrieValue(clientAuths, auth, i);
 		}
 	}
@@ -1684,7 +1684,7 @@ ReasonSelected(client, String:reason[]) {
 
 	decl String:adminName[64], String:adminAuth[64];
 	GetClientName(client, adminName, sizeof(adminName));
-	GetClientAuthString(client, adminAuth, sizeof(adminAuth));
+	GetClientAuthId(client, AuthId_Steam2, adminAuth, sizeof(adminAuth));
 
 	if (adminMenuClientStatusAdding[client]) {
 		PunishClient(pmethod[name], adminMenuClientStatusTarget[client], adminMenuClientStatusDuration[client], reason, adminName, adminAuth, Command_Punish_Client_Result, client);
