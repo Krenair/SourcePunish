@@ -430,7 +430,15 @@ public Command_Unpunish_Identity_Result(String:identity[], result, String:adminN
 }
 
 public OnClientAuthorized(client, const String:auth[]) {
-	decl String:escapedAuth[64], String:query[512];
+	decl String:escapedAuth[64], String:clientIP[45], String:escapedClientIP[90], String:IPQuery[100], String:query[512];
+    // Get client IP and format IP query
+    if (GetClientIP(client, clientIP, sizeof(clientIP))) {
+        SQL_EscapeString(db, clientIP, escapedClientIP, sizeof(escapedClientIP));
+        Format(IPQuery, sizeof(IPQuery), "OR (Punish_Auth_Type = 'ip' AND Punish_Player_IP = '%s')", escapedClientIP);
+    } else {
+        Format(IPQuery, sizeof(IPQuery), "");
+    }
+    
 	SQL_EscapeString(db, auth, escapedAuth, sizeof(escapedAuth));
 	Format(
 		query,
@@ -443,10 +451,11 @@ public OnClientAuthorized(client, const String:auth[]) {
 			UnPunish = 0 AND \
 			(Punish_Server_ID = %i OR Punish_All_Servers = 1) AND \
 			((Punish_Time + (Punish_Length * 60)) > UNIX_TIMESTAMP(NOW()) OR Punish_Length = 0) AND \
-			Punish_Player_ID = '%s' \
+			((Punish_Auth_Type = 'steam' AND Punish_Player_ID = '%s') %s) \
 		;",
+		serverID,
 		escapedAuth,
-		serverID
+        IPQuery
 	);
 	SQL_TQuery(db, UsersActivePunishmentsLookupComplete, query, client);
 }
